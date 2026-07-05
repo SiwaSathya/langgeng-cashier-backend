@@ -1,0 +1,445 @@
+basePath: /
+definitions:
+  domain.Brand:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  domain.Category:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  domain.Customer:
+    properties:
+      address:
+        type: string
+      age:
+        type: integer
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: integer
+      identity_number:
+        type: string
+      name:
+        type: string
+      phone_number:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  domain.ProductRequest:
+    properties:
+      brand:
+        $ref: '#/definitions/domain.Brand'
+      brandID:
+        type: integer
+      category:
+        $ref: '#/definitions/domain.Category'
+      categoryID:
+        type: integer
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      hbeli:
+        type: number
+      hjual:
+        type: number
+      hpokok:
+        type: number
+      id:
+        type: integer
+      kode:
+        type: string
+      nama:
+        type: string
+      saldo:
+        type: number
+      satuan:
+        type: string
+      supplier:
+        $ref: '#/definitions/domain.Supplier'
+      supplierID:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  domain.ProductResponse:
+    properties:
+      brand:
+        $ref: '#/definitions/domain.Brand'
+      brandID:
+        type: integer
+      category:
+        $ref: '#/definitions/domain.Category'
+      categoryID:
+        type: integer
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      hbeli:
+        type: number
+      hjual:
+        type: number
+      hpokok:
+        type: number
+      id:
+        type: integer
+      kode:
+        type: string
+      nama:
+        type: string
+      saldo:
+        type: number
+      satuan:
+        type: string
+      supplier:
+        $ref: '#/definitions/domain.Supplier'
+      supplierID:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  domain.SalesResponse:
+    properties:
+      amount_paid:
+        type: number
+      change:
+        type: number
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      discount:
+        description: Potongan harga
+        type: number
+      h_beli:
+        type: number
+      h_jual:
+        type: number
+      id:
+        type: integer
+      invoice:
+        type: string
+      member_name:
+        description: Dari field 'Member' di gambar
+        type: string
+      payment_method:
+        type: string
+      product:
+        $ref: '#/definitions/domain.ProductResponse'
+      product_id:
+        type: integer
+      qty:
+        type: number
+      total_netto:
+        description: Harga setelah diskon
+        type: number
+      updated_at:
+        type: string
+    type: object
+  domain.Supplier:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  http.SalesRequest:
+    properties:
+      amount_paid:
+        example: 2500000
+        type: number
+      customer:
+        $ref: '#/definitions/domain.Customer'
+      discount:
+        example: 0
+        type: number
+      is_dp:
+        example: false
+        type: boolean
+      member_name:
+        example: Desak
+        type: string
+      payment_method:
+        example: Bayar Tunai
+        type: string
+      price:
+        example: 20000
+        type: number
+      product_search:
+        example: POLY 32RG9059
+        type: string
+      qty:
+        example: 1
+        type: number
+      user_id:
+        example: 123
+        type: integer
+    type: object
+host: localhost:4000
+info:
+  contact: {}
+  description: API Sistem Kasir dengan Manajemen Stok dan Biaya Operasional.
+  title: Backend Cashier API
+  version: "1.0"
+paths:
+  /api/categories:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil semua data kategori barang yang tersedia
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.Category'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get Daftar Kategori
+      tags:
+      - Master Data
+  /api/expenditure:
+    get:
+      responses: {}
+      summary: Laporan Pengeluaran (Filter)
+      tags:
+      - Reports
+    post:
+      responses: {}
+      summary: Input Pengeluaran (Barang/Operasional)
+      tags:
+      - Transactions
+  /api/products:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil data produk, bisa difilter berdasarkan nama atau kode
+        barang
+      parameters:
+      - description: Cari berdasarkan Nama atau Kode Barang
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.ProductResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get Daftar Produk
+      tags:
+      - Master Data
+  /api/sales:
+    get:
+      responses: {}
+      summary: Laporan Penjualan (Filter)
+      tags:
+      - Reports
+    post:
+      parameters:
+      - description: Payload Penjualan
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/http.SalesRequest'
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.SalesResponse'
+      summary: Input Penjualan Kasir (Full Detail)
+      tags:
+      - Transactions
+  /master/resources:
+    get:
+      description: Mengambil daftar Category, Brand, dan Supplier untuk pilihan input
+        produk.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get Dropdown Resources
+      tags:
+      - Master Data
+  /products:
+    get:
+      consumes:
+      - application/json
+      description: Mengambil semua data produk dengan pagination dan pencarian nama/kode.
+      parameters:
+      - description: Search by Name or Code
+        in: query
+        name: search
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get All Products
+      tags:
+      - Products
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Product Body
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/domain.ProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create New Product
+      tags:
+      - Products
+  /products/{id}:
+    delete:
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete Product
+      tags:
+      - Products
+    get:
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.ProductRequest'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get Product by ID
+      tags:
+      - Products
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update Data
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/domain.ProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update Existing Product
+      tags:
+      - Products
+swagger: "2.0"
