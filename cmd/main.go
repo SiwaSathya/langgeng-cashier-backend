@@ -2,6 +2,7 @@ package main
 
 import (
 	"backend-cashier/domain"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -10,11 +11,178 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+type ProductJSON struct {
+	Kode string `json:"kode"`
+
+	Nama string `json:"nama"`
+
+	Satuan string `json:"satuan"`
+
+	Saldo float64 `json:"saldo"`
+
+	HBeli float64 `json:"h_beli"`
+
+	HJual float64 `json:"h_jual"`
+
+	Supplier string `json:"supplier"`
+
+	Category string `json:"category"`
+
+	Brand string `json:"brand"`
+}
+
+type ProductJSONWrapper struct {
+	Products []ProductJSON `json:"products"`
+}
+
+func getOrCreateCategory(
+	db *gorm.DB,
+	name string,
+) domain.Category {
+
+	var category domain.Category
+
+	name = strings.TrimSpace(name)
+
+	if name == "" {
+
+		name = "Uncategorized"
+
+	}
+
+	err :=
+		db.Where(
+			"LOWER(name) LIKE ?",
+			"%"+strings.ToLower(name)+"%",
+		).
+			First(&category).
+			Error
+
+	if err == gorm.ErrRecordNotFound {
+
+		category =
+			domain.Category{
+
+				Name: name,
+			}
+
+		db.Create(
+			&category,
+		)
+
+		fmt.Println(
+			"[CREATE CATEGORY]",
+			name,
+		)
+
+	}
+
+	return category
+
+}
+
+func getOrCreateBrand(
+	db *gorm.DB,
+	name string,
+) domain.Brand {
+
+	var brand domain.Brand
+
+	name =
+		strings.TrimSpace(name)
+
+	if name == "" {
+
+		name = "No Brand"
+
+	}
+
+	err :=
+		db.Where(
+			"LOWER(name) LIKE ?",
+			"%"+strings.ToLower(name)+"%",
+		).
+			First(&brand).
+			Error
+
+	if err == gorm.ErrRecordNotFound {
+
+		brand =
+			domain.Brand{
+
+				Name: name,
+			}
+
+		db.Create(
+			&brand,
+		)
+
+		fmt.Println(
+			"[CREATE BRAND]",
+			name,
+		)
+
+	}
+
+	return brand
+
+}
+
+func getOrCreateSupplier(
+	db *gorm.DB,
+	name string,
+) domain.Supplier {
+
+	var supplier domain.Supplier
+
+	name =
+		strings.TrimSpace(name)
+
+	if name == "" {
+
+		name = "Tanpa Supplier"
+
+	}
+
+	err :=
+		db.Where(
+			"LOWER(name) LIKE ?",
+			"%"+strings.ToLower(name)+"%",
+		).
+			First(&supplier).
+			Error
+
+	if err == gorm.ErrRecordNotFound {
+
+		supplier =
+			domain.Supplier{
+
+				ID: uuid.New().String(),
+
+				Name: name,
+			}
+
+		db.Create(
+			&supplier,
+		)
+
+		fmt.Println(
+			"[CREATE SUPPLIER]",
+			name,
+		)
+
+	}
+
+	return supplier
+
+}
 
 func getColumn(row []string, index int) string {
 	if index < len(row) {
@@ -23,7 +191,6 @@ func getColumn(row []string, index int) string {
 	return ""
 }
 
-// Helper untuk membersihkan format angka ribuan (titik) agar bisa jadi float
 func parseExcelNumber(val interface{}) float64 {
 	switch v := val.(type) {
 	case float64:
@@ -34,7 +201,7 @@ func parseExcelNumber(val interface{}) float64 {
 		if v == "" || v == "-" {
 			return 0
 		}
-		// Bersihkan karakter non-angka kecuali minus dan koma/titik desimal
+
 		cleanS := strings.ReplaceAll(v, ".", "")
 		cleanS = strings.ReplaceAll(cleanS, ",", ".")
 
@@ -49,7 +216,7 @@ func parseExcelNumber(val interface{}) float64 {
 }
 
 func main() {
-	importType := flag.String("type", "", "Tipe import: 'stock' atau 'rekap'")
+	importType := flag.String("type", "", "Tipe import: stock, rekap, pembelian, json")
 	flag.Parse()
 
 	_ = godotenv.Load()
@@ -74,11 +241,42 @@ func main() {
 		importRekap(db, "REKAP PENJUALAN.xlsx")
 	case "pembelian":
 		importPurchaseAndExpense(db, "pbl.xlsx")
+	case "json":
+
+		importProductJSON(
+			db,
+			"products_combined.json",
+		)
+
 	default:
 		fmt.Println("Silakan gunakan flag -type untuk memilih:")
 		fmt.Println("  go run main.go -type=stock")
 		fmt.Println("  go run main.go -type=rekap")
 	}
+}
+
+// Helper untuk mengambil kolom dengan aman tanpa takut index out of range
+func getColumnSafe(row []string, index int) string {
+	if index < 0 || index >= len(row) {
+		return ""
+	}
+	return strings.TrimSpace(row[index])
+}
+
+// Helper untuk parsing float yang aman dari format string kosong atau spasial
+func parseExcelFloat(val string) float64 {
+	if val == "" {
+		return 0
+	}
+	// Hilangkan koma jika ada format ribuan (misal: 2,060,160 atau 2.060.160 tergantung regional)
+	// Kita bersihkan karakter non-numeric kecuali titik/koma desimal jika diperlukan
+	val = strings.ReplaceAll(val, ",", "")
+
+	res, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		return 0
+	}
+	return res
 }
 
 func importStock(db *gorm.DB, fileName string) {
@@ -89,38 +287,52 @@ func importStock(db *gorm.DB, fileName string) {
 	}
 	defer f.Close()
 
-	rows, _ := f.GetRows("Sheet1")
+	// Ganti ke sheet yang sesuai jika diperlukan (misal Sheet1)
+	rows, err := f.GetRows("Sheet1")
+	if err != nil {
+		log.Fatalf("Gagal membaca sheet: %v", err)
+	}
+
 	suppliersMap := make(map[string]bool)
 	categoriesMap := make(map[string]uint)
 	brandsMap := make(map[string]uint)
 
 	for i, row := range rows {
-		if i < 3 || len(row) < 5 {
+		// Header ada di baris ke-4 (indeks 3), data mulai dari indeks 4
+		if i < 4 {
 			continue
 		}
 
-		kode := getColumn(row, 1)
-		nama := getColumn(row, 3)
-		satuan := getColumn(row, 4)
-		saldo, _ := strconv.ParseFloat(getColumn(row, 5), 64)
-		hBeli, _ := strconv.ParseFloat(getColumn(row, 6), 64)
-		hJual, _ := strconv.ParseFloat(getColumn(row, 8), 64)
-		supplierID := getColumn(row, 22)
-		supplierNm := getColumn(row, 23)
-		catName := getColumn(row, 25)
-		brandName := getColumn(row, 26)
+		// Pastikan baris memiliki data minimal (misal kolom Kode dan Nama tidak kosong)
+		kode := getColumnSafe(row, 1)
+		if kode == "" || kode == "-" {
+			continue
+		}
 
-		if supplierID == "" {
+		nama := getColumnSafe(row, 3)
+		satuan := getColumnSafe(row, 4)
+
+		// Gunakan parser float yang lebih aman
+		saldo := parseExcelFloat(getColumnSafe(row, 5))
+		hBeli := parseExcelFloat(getColumnSafe(row, 6))
+		hJual := parseExcelFloat(getColumnSafe(row, 8)) // Kolom HJUAL (Indeks 8)
+
+		supplierID := getColumnSafe(row, 22)
+		supplierNm := getColumnSafe(row, 23)
+		catName := getColumnSafe(row, 25)
+		brandName := getColumnSafe(row, 26)
+
+		if supplierID == "" || supplierID == "-" {
 			supplierID = "UNKNOWN"
 			supplierNm = "Tanpa Supplier"
 		}
 		if !suppliersMap[supplierID] {
 			s := domain.Supplier{ID: supplierID, Name: supplierNm}
-			db.FirstOrCreate(&s)
+			db.Where(domain.Supplier{ID: supplierID}).FirstOrCreate(&s)
 			suppliersMap[supplierID] = true
 		}
 
-		if catName == "" {
+		if catName == "" || catName == "-" {
 			catName = "Uncategorized"
 		}
 		if _, ok := categoriesMap[catName]; !ok {
@@ -129,7 +341,7 @@ func importStock(db *gorm.DB, fileName string) {
 			categoriesMap[catName] = c.ID
 		}
 
-		if brandName == "" {
+		if brandName == "" || brandName == "-" {
 			brandName = "No Brand"
 		}
 		if _, ok := brandsMap[brandName]; !ok {
@@ -138,12 +350,34 @@ func importStock(db *gorm.DB, fileName string) {
 			brandsMap[brandName] = b.ID
 		}
 
-		product := domain.Product{
-			Kode: kode, Nama: nama, Satuan: satuan, Saldo: saldo,
-			HBeli: hBeli, HJual: hJual, SupplierID: supplierID,
-			CategoryID: categoriesMap[catName], BrandID: brandsMap[brandName],
+		var existingProduct domain.Product
+		err := db.Where("kode = ?", kode).First(&existingProduct).Error
+
+		if err == gorm.ErrRecordNotFound {
+			newProduct := domain.Product{
+				Kode:       kode,
+				Nama:       nama,
+				Satuan:     satuan,
+				Saldo:      saldo,
+				HBeli:      hBeli,
+				HJual:      hJual,
+				SupplierID: supplierID,
+				CategoryID: categoriesMap[catName],
+				BrandID:    brandsMap[brandName],
+			}
+			db.Create(&newProduct)
+		} else if err == nil {
+			existingProduct.Nama = nama
+			existingProduct.Satuan = satuan
+			existingProduct.Saldo = saldo
+			existingProduct.HBeli = hBeli
+			existingProduct.HJual = hJual
+			existingProduct.SupplierID = supplierID
+			existingProduct.CategoryID = categoriesMap[catName]
+			existingProduct.BrandID = brandsMap[brandName]
+
+			db.Save(&existingProduct)
 		}
-		db.Where(domain.Product{Kode: kode}).FirstOrCreate(&product)
 	}
 	fmt.Println("Import Stock Selesai!")
 }
@@ -268,4 +502,177 @@ func importPurchaseAndExpense(db *gorm.DB, fileName string) {
 		}
 	}
 	fmt.Println(">>> Proses Selesai: Data Barang & Non-Barang telah dipisahkan!")
+}
+
+func importProductJSON(
+	db *gorm.DB,
+	fileName string,
+) {
+
+	fmt.Println(
+		"Start Import Product JSON",
+	)
+
+	file, err :=
+		os.ReadFile(fileName)
+
+	if err != nil {
+
+		log.Fatal(err)
+
+	}
+
+	var data ProductJSONWrapper
+
+	err =
+		json.Unmarshal(
+			file,
+			&data,
+		)
+
+	if err != nil {
+
+		log.Fatal(err)
+
+	}
+
+	for _, item := range data.Products {
+
+		fmt.Println(
+			"Processing:",
+			item.Kode,
+		)
+
+		// =====================
+		// MASTER DATA
+		// =====================
+
+		category :=
+			getOrCreateCategory(
+				db,
+				item.Category,
+			)
+
+		brand :=
+			getOrCreateBrand(
+				db,
+				item.Brand,
+			)
+
+		supplier :=
+			getOrCreateSupplier(
+				db,
+				item.Supplier,
+			)
+
+		// =====================
+		// PRODUCT
+		// =====================
+
+		var product domain.Product
+
+		err :=
+			db.Where(
+				"kode = ?",
+				item.Kode,
+			).
+				First(
+					&product,
+				).
+				Error
+
+		if err == gorm.ErrRecordNotFound {
+
+			product =
+				domain.Product{
+
+					Kode: item.Kode,
+
+					Nama: item.Nama,
+
+					Satuan: item.Satuan,
+
+					Saldo: item.Saldo,
+
+					HBeli: item.HBeli,
+
+					HPokok: item.HBeli,
+
+					HJual: item.HJual,
+
+					SupplierID: supplier.ID,
+
+					CategoryID: category.ID,
+
+					BrandID: brand.ID,
+				}
+
+			err =
+				db.Create(
+					&product,
+				).
+					Error
+
+			if err != nil {
+
+				fmt.Println(
+					"[ERROR CREATE PRODUCT]",
+					err,
+				)
+
+			} else {
+
+				fmt.Println(
+					"[INSERT]",
+					item.Nama,
+				)
+
+			}
+
+		} else {
+
+			product.Nama =
+				item.Nama
+
+			product.Satuan =
+				item.Satuan
+
+			product.Saldo =
+				item.Saldo
+
+			product.HBeli =
+				item.HBeli
+
+			product.HPokok =
+				item.HBeli
+
+			product.HJual =
+				item.HJual
+
+			product.SupplierID =
+				supplier.ID
+
+			product.CategoryID =
+				category.ID
+
+			product.BrandID =
+				brand.ID
+
+			db.Save(
+				&product,
+			)
+
+			fmt.Println(
+				"[UPDATE]",
+				item.Nama,
+			)
+
+		}
+
+	}
+
+	fmt.Println(
+		"Import Product JSON selesai",
+	)
+
 }

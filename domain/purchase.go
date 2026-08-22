@@ -13,10 +13,10 @@ type Purchase struct {
 	Tanggal    time.Time `gorm:"index" json:"tanggal"`
 	ProductID  uint      `json:"product_id"`
 	Product    Product   `gorm:"foreignKey:ProductID" json:"product"`
-	SupplierID uint      `json:"supplier_id"` // Tambahkan ini
+	SupplierID uint      `json:"supplier_id"`
 	Supplier   Supplier  `gorm:"foreignKey:SupplierID" json:"supplier"`
 	Qty        float64   `json:"qty"`
 	HBeli      float64   `json:"h_beli"`
-	HargaJual  float64   `gorm:"-" json:"harga_jual"` // Field sementara untuk update master produk
+	HargaJual  float64   `gorm:"-" json:"harga_jual"`
 	Total      float64   `json:"total"`
 }

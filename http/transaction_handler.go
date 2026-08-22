@@ -52,10 +52,120 @@ func (h *TransactionHandler) RegisterRoutes(app *fiber.App) {
 
 	// --- RUTE SALES RETUR & USER SALES ---
 	api.Get("/sales/user/:user_id", h.GetUserSales)
+	api.Get("/shift/current", h.GetCurrentShift)
+	api.Get(
+		"/receipt",
+		h.GetReceipt,
+	)
+
+	api.Put(
+		"/sales/update/shift",
+		h.UpdateSalesShift,
+	)
 	// api.Get("/sales/:id/is-retur", h.IsRetur)
 	// api.Put("/sales/:id/is-retur", h.IsReturUpdate) // Menggunakan Query Param ?status=true
 	// api.Get("/sales/:id/is-retur-company", h.IsReturToCompany)
 	// api.Put("/sales/:id/is-retur-company", h.IsReturToCompanyUpdate) // Menggunakan Query Param ?status=true
+}
+
+// UpdateSalesShift
+// @Summary Update shift transaksi
+// @Tags Sales
+// @Router /api/sales/update-shift [put]
+
+func (h *TransactionHandler) UpdateSalesShift(
+	c *fiber.Ctx,
+) error {
+
+	var req domain.UpdateShiftRequest
+
+	if err := c.BodyParser(&req); err != nil {
+
+		return c.Status(
+			400,
+		).JSON(
+			fiber.Map{
+
+				"error": "format request salah",
+			},
+		)
+
+	}
+
+	if req.Shift == 0 {
+
+		return c.Status(
+			400,
+		).JSON(
+			fiber.Map{
+
+				"error": "shift tidak boleh kosong",
+			},
+		)
+
+	}
+
+	err := h.Service.UpdateSalesShift(
+		req.Shift,
+	)
+
+	if err != nil {
+
+		return c.Status(
+			500,
+		).JSON(
+			fiber.Map{
+
+				"error": err.Error(),
+			},
+		)
+
+	}
+
+	return c.JSON(
+		fiber.Map{
+
+			"message": "Shift transaksi berhasil diperbarui",
+
+			"shift": req.Shift,
+		},
+	)
+
+}
+
+// GetReceipt mengambil transaksi yang belum mempunyai shift
+// @Summary      Data Nota Shift
+// @Tags         Receipt
+// @Router       /api/receipt [get]
+
+func (h *TransactionHandler) GetReceipt(
+	c *fiber.Ctx,
+) error {
+
+	results, err := h.Service.GetReceipt()
+
+	if err != nil {
+
+		return c.Status(500).JSON(
+			fiber.Map{
+
+				"error": err.Error(),
+			},
+		)
+
+	}
+
+	return c.JSON(
+		domain.ReceiptResponse{
+
+			Category: results.Category,
+
+			Sales: results.Sales,
+
+			Expenses: results.Expenses,
+		},
+	)
+
 }
 
 // @Summary      Input Penjualan Kasir (Full Detail)
@@ -217,4 +327,20 @@ func (h *TransactionHandler) PutPelunasanSales(c *fiber.Ctx) error {
 		"message": "Pelunasan transaksi berhasil disimpan!",
 		"data":    result,
 	})
+}
+
+func (h *TransactionHandler) GetCurrentShift(
+	c *fiber.Ctx,
+) error {
+
+	shift :=
+		h.Service.GetCurrentShift()
+
+	return c.JSON(
+		fiber.Map{
+
+			"shift": shift,
+		},
+	)
+
 }

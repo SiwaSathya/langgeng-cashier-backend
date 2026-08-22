@@ -76,6 +76,7 @@ func (s *TransactionService) CreateSales(requests []domain.SalesRequest) (*domai
 				PaymentMethod: req.PaymentMethod,
 				AmountPaid:    req.AmountPaid,
 				IsDp:          req.IsDp,
+				Shift:         nil,
 			}
 
 			if req.IsDp {
@@ -268,4 +269,97 @@ func (s *TransactionService) PelunasanSales(id uint, req PelunasanRequest) (*dom
 		return nil, err
 	}
 	return &sale, nil
+}
+
+func (s *TransactionService) GetCurrentShift() uint {
+
+	todayStart := time.Now().
+		Format("2006-01-02") + " 00:00:00"
+
+	todayEnd := time.Now().
+		Format("2006-01-02") + " 23:59:59"
+
+	var count int64
+
+	s.DB.Model(&domain.Sales{}).
+		Where(
+			"created_at BETWEEN ? AND ? AND shift IS NOT NULL",
+			todayStart,
+			todayEnd,
+		).
+		Count(&count)
+
+	if count == 0 {
+
+		return 1
+
+	}
+
+	return 2
+
+}
+
+func (s *TransactionService) GetReceipt() (*domain.ReceiptResponse, error) {
+
+	var sales []domain.Sales
+
+	err :=
+		s.DB.
+			Preload("Product").
+			Preload("User").
+			Where(
+				"shift IS NULL",
+			).
+			Find(&sales).
+			Error
+
+	if err != nil {
+
+		return nil, err
+
+	}
+
+	var expenses []domain.Expense
+
+	err =
+		s.DB.
+			Where(
+				"tanggal >= ?",
+				time.Now().Format("2006-01-02"),
+			).
+			Find(&expenses).
+			Error
+
+	if err != nil {
+
+		return nil, err
+
+	}
+
+	return &domain.ReceiptResponse{
+
+		Category: "SHIFT_RECEIPT",
+
+		Sales: sales,
+
+		Expenses: expenses,
+	}, nil
+
+}
+
+func (s *TransactionService) UpdateSalesShift(
+	shift uint,
+) error {
+
+	return s.DB.
+		Model(&domain.Sales{}).
+		Where(
+			"shift IS NULL",
+		).
+		Update(
+			"shift",
+			shift,
+		).
+		Error
+
 }

@@ -25,6 +25,7 @@ type Sales struct {
 	IsDp          bool     `json:"is_dp"`
 	CustomerID    *uint    `gorm:"nullable" json:"customer_id"`
 	Status        string   `json:"status"`
+	Shift         *uint    `gorm:"nullable" json:"shift"`
 	Customer      Customer `gorm:"foreignKey:CustomerID"`
 	User          User     `gorm:"foreignKey:UserID"`
 }
@@ -67,4 +68,16 @@ type SalesFilter struct {
 	EndDate   string `query:"end_date"`
 	Member    string `query:"member"`
 	Method    string `query:"method"`
+}
+
+type UpdateShiftRequest struct {
+	Shift uint `json:"shift"`
+}
+
+type ReceiptResponse struct {
+	Category string `json:"category"`
+
+	Sales []Sales `json:"sales"`
+
+	Expenses []Expense `json:"expenses"`
 }
