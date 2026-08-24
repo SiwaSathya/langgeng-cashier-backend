@@ -52,6 +52,8 @@ func (h *TransactionHandler) RegisterRoutes(app *fiber.App) {
 	api.Put("/sales/:id", h.PutPelunasanSales)
 	api.Put("/sales/pelunasan/:invoice", h.PutPelunasanSales)
 	api.Put("/sales/invoice/:invoice/pelunasan", h.PutPelunasanSales)
+	api.Delete("/sales/:id", h.DeleteSales)
+	api.Delete("/sales/invoice/:invoice", h.DeleteSales)
 
 	// --- RUTE SALES RETUR & USER SALES ---
 	api.Get("/sales/user/:user_id", h.GetUserSales)
@@ -381,4 +383,26 @@ func (h *TransactionHandler) GetCurrentShift(
 			"location": location,
 		},
 	)
+}
+
+func (h *TransactionHandler) DeleteSales(c *fiber.Ctx) error {
+	identifier := c.Params("id")
+	if identifier == "" {
+		identifier = c.Params("invoice")
+	}
+	if identifier == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Nomor invoice atau ID transaksi tidak boleh kosong",
+		})
+	}
+
+	if err := h.Service.DeleteSales(identifier); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Transaksi berhasil dibatalkan dan seluruh stok produk telah dikembalikan",
+	})
 }

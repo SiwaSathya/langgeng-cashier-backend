@@ -36,6 +36,127 @@ func (h *AccountingHandler) RegisterRoutes(app *fiber.App) {
 	// Rekapitulasi & Buku Besar
 	api.Get("/recap", h.GetRekapitulasi)
 	api.Get("/ledger", h.GetGeneralLedger)
+
+	// Piutang Dagang
+	api.Get("/piutang", h.GetAllPiutang)
+	api.Post("/piutang", h.CreatePiutang)
+	api.Get("/piutang/:id", h.GetPiutangByID)
+	api.Put("/piutang/:id", h.UpdatePiutang)
+	api.Delete("/piutang/:id", h.DeletePiutang)
+}
+
+func (h *AccountingHandler) GetAllPiutang(c *fiber.Ctx) error {
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+
+	filter := domain.PiutangFilter{
+		StartDate: c.Query("start_date"),
+		EndDate:   c.Query("end_date"),
+		Search:    c.Query("search"),
+		Status:    c.Query("status"),
+		Page:      page,
+		Limit:     limit,
+	}
+
+	records, total, err := h.Service.GetAllPiutang(filter)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"data":  records,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+	})
+}
+
+func (h *AccountingHandler) CreatePiutang(c *fiber.Ctx) error {
+	var req domain.PiutangDagangRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Format request tidak valid",
+		})
+	}
+
+	result, err := h.Service.CreatePiutang(req)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(201).JSON(fiber.Map{
+		"message": "Data piutang dagang berhasil disimpan",
+		"data":    result,
+	})
+}
+
+func (h *AccountingHandler) GetPiutangByID(c *fiber.Ctx) error {
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "ID piutang tidak valid",
+		})
+	}
+
+	result, err := h.Service.GetPiutangByID(uint(id))
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(result)
+}
+
+func (h *AccountingHandler) UpdatePiutang(c *fiber.Ctx) error {
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "ID piutang tidak valid",
+		})
+	}
+
+	var req domain.PiutangDagangRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Format request tidak valid",
+		})
+	}
+
+	result, err := h.Service.UpdatePiutang(uint(id), req)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Data piutang dagang berhasil diperbarui",
+		"data":    result,
+	})
+}
+
+func (h *AccountingHandler) DeletePiutang(c *fiber.Ctx) error {
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "ID piutang tidak valid",
+		})
+	}
+
+	if err := h.Service.DeletePiutang(uint(id)); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Data piutang dagang berhasil dihapus",
+	})
 }
 
 func (h *AccountingHandler) GetAllAccounts(c *fiber.Ctx) error {

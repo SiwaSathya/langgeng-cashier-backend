@@ -43,12 +43,16 @@ func (s *AttendanceService) CreateAttendance(req domain.AttendanceRequest) (*dom
 
 	status := req.Status
 	if status == "" {
-		status = "Hadir"
+		status = "Pagi"
 	}
 
 	shift := req.Shift
 	if shift == 0 {
-		shift = 1
+		if strings.EqualFold(status, "Siang") {
+			shift = 2
+		} else {
+			shift = 1
+		}
 	}
 
 	var checkInTime *time.Time
@@ -64,7 +68,7 @@ func (s *AttendanceService) CreateAttendance(req domain.AttendanceRequest) (*dom
 			}
 		}
 	}
-	if checkInTime == nil && status == "Hadir" {
+	if checkInTime == nil && (status == "Pagi" || status == "Siang" || status == "Lembur" || status == "Bantu" || status == "Hadir") {
 		now := time.Now()
 		checkInTime = &now
 	}
@@ -216,11 +220,15 @@ func (s *AttendanceService) GetSummary(dateStr string) (*domain.AttendanceSummar
 	var summary domain.AttendanceSummary
 	query := s.DB.Model(&domain.Attendance{}).Where("DATE(date) = ?", dateStr)
 
-	query.Where("status = ?", "Hadir").Count(&summary.Hadir)
-	query.Where("status = ?", "Izin").Count(&summary.Izin)
+	query.Where("status = ? OR status = ? OR status = ?", "Pagi", "Hadir Pagi", "Hadir").Count(&summary.Pagi)
+	query.Where("status = ? OR status = ?", "Siang", "Hadir Siang").Count(&summary.Siang)
+	query.Where("status = ? OR status = ?", "Libur", "Off").Count(&summary.Libur)
+	query.Where("status = ? OR status = ?", "Lembur", "Full Lembur").Count(&summary.Lembur)
+	query.Where("status = ? OR status = ? OR status = ?", "Bantu", "Setengah Lembur", "Lembur Setengah").Count(&summary.Bantu)
 	query.Where("status = ?", "Sakit").Count(&summary.Sakit)
-	query.Where("status = ? OR status = ?", "Alfa", "Alpha").Count(&summary.Alfa)
-	summary.Total = summary.Hadir + summary.Izin + summary.Sakit + summary.Alfa
+	query.Where("status = ? OR status = ?", "Dispensasi", "Izin").Count(&summary.Dispensasi)
+
+	summary.Total = summary.Pagi + summary.Siang + summary.Libur + summary.Lembur + summary.Bantu + summary.Sakit + summary.Dispensasi
 
 	return &summary, nil
 }

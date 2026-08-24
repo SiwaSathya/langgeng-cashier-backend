@@ -132,6 +132,9 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 		// 3. Otomatisasi Pencatatan Jurnal Double-Entry ke Buku Harian
 		if s.AccountingSvc != nil {
 			s.AccountingSvc.AutoPostSalesJournal(tx, invoice, req.PaymentMethod, totalNettoAll, req.AmountPaid, req.IsDp, time.Now())
+			if req.IsDp {
+				s.AccountingSvc.AutoRecordSalesPiutang(tx, customerID, req.Customer.Name, req.Customer.PhoneNumber, invoice, totalNettoAll, req.AmountPaid, time.Now())
+			}
 		}
 
 		return nil
@@ -420,6 +423,7 @@ func (s *TransactionService) PelunasanSales(identifier string, req domain.Peluna
 		// Update / Catat Jurnal Pelunasan Otomatis
 		if s.AccountingSvc != nil {
 			s.AccountingSvc.AutoPostSalesJournal(tx, invoice, paymentMethod, amountPaid, amountPaid, false, time.Now())
+			s.AccountingSvc.AutoSettleSalesPiutang(tx, invoice, amountPaid)
 		}
 
 		return nil
@@ -520,4 +524,54 @@ func (s *TransactionService) UpdateSalesShift(shift uint, location string) error
 	}
 
 	return q.Update("shift", shift).Error
+}
+
+func (s *TransactionService) DeleteSales(identifier string) error {
+	var salesList []domain.Sales
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var invoice string
+
+		if id, err := strconv.Atoi(identifier); err == nil && id > 0 {
+			var singleSale domain.Sales
+			if err := tx.First(&singleSale, id).Error; err != nil {
+				return errors.New("data transaksi tidak ditemukan")
+			}
+			invoice = singleSale.Invoice
+		} else {
+			invoice = identifier
+		}
+
+		if invoice == "" {
+			return errors.New("nomor nota / invoice tidak valid")
+		}
+
+		if err := tx.Where("invoice = ?", invoice).Find(&salesList).Error; err != nil || len(salesList) == 0 {
+			return errors.New("data transaksi penjualan tidak ditemukan")
+		}
+
+		// 1. Kembalikan semua stok barang yang terjual pada nota ini
+		for _, item := range salesList {
+			if item.ProductID > 0 && item.Qty > 0 {
+				var prod domain.Product
+				if err := tx.First(&prod, item.ProductID).Error; err == nil {
+					tx.Model(&prod).Update("saldo", prod.Saldo+item.Qty)
+				}
+			}
+		}
+
+		// 2. Hapus jurnal otomatis terkait nota jika ada
+		entryNumber := fmt.Sprintf("JV-SALES-%s", invoice)
+		var journal domain.JournalEntry
+		if err := tx.Where("entry_number = ?", entryNumber).First(&journal).Error; err == nil {
+			tx.Where("journal_entry_id = ?", journal.ID).Delete(&domain.JournalItem{})
+			tx.Delete(&journal)
+		}
+
+		// 3. Hapus catatan piutang dagang jika ada
+		tx.Where("sales_invoice = ?", invoice).Delete(&domain.PiutangDagang{})
+
+		// 4. Hapus baris penjualan
+		return tx.Where("invoice = ?", invoice).Delete(&domain.Sales{}).Error
+	})
 }

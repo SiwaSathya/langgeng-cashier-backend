@@ -106,3 +106,42 @@ type LedgerAccountCard struct {
 	EndingBalance  float64                 `json:"ending_balance"`
 	Transactions   []LedgerTransactionItem `json:"transactions"`
 }
+
+// PiutangDagang (Buku Pembantu Piutang / Accounts Receivable)
+type PiutangDagang struct {
+	gorm.Model
+	CustomerID    *uint     `json:"customer_id"`
+	Customer      Customer  `gorm:"foreignKey:CustomerID" json:"customer"`
+	CustomerName  string    `gorm:"size:150" json:"customer_name"`
+	CustomerPhone string    `gorm:"size:50" json:"customer_phone"`
+	SalesInvoice  string    `gorm:"size:100;index" json:"sales_invoice"`
+	Tanggal       time.Time `gorm:"index" json:"tanggal"`
+	SaldoAwal     float64   `gorm:"default:0" json:"saldo_awal"`
+	Debet         float64   `gorm:"default:0" json:"debet"`  // Penambahan piutang (Total Penjualan)
+	Kredit        float64   `gorm:"default:0" json:"kredit"` // Pembayaran / Pelunasan
+	SaldoAkhir    float64   `gorm:"default:0" json:"saldo_akhir"`
+	Keterangan    string    `gorm:"size:255" json:"keterangan"`
+	Status        string    `gorm:"size:50" json:"status"` // Belum Lunas, Lunas
+}
+
+type PiutangDagangRequest struct {
+	CustomerID    *uint   `json:"customer_id"`
+	CustomerName  string  `json:"customer_name"`
+	CustomerPhone string  `json:"customer_phone"`
+	SalesInvoice  string  `json:"sales_invoice"`
+	Tanggal       string  `json:"tanggal"` // YYYY-MM-DD
+	SaldoAwal     float64 `json:"saldo_awal"`
+	Debet         float64 `json:"debet"`
+	Kredit        float64 `json:"kredit"`
+	Keterangan    string  `json:"keterangan"`
+	Status        string  `json:"status"`
+}
+
+type PiutangFilter struct {
+	StartDate string `query:"start_date"`
+	EndDate   string `query:"end_date"`
+	Search    string `query:"search"`
+	Status    string `query:"status"`
+	Page      int    `query:"page"`
+	Limit     int    `query:"limit"`
+}

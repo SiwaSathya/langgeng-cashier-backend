@@ -12,7 +12,7 @@ type Attendance struct {
 	User     User       `gorm:"foreignKey:UserID" json:"user"`
 	Date     time.Time  `gorm:"index" json:"date"`
 	Shift    uint       `json:"shift"` // 1, 2, 3
-	Status   string     `gorm:"size:50" json:"status"` // Hadir, Izin, Sakit, Alfa
+	Status   string     `gorm:"size:50" json:"status"` // Pagi, Siang, Libur, Lembur, Bantu, Sakit, Dispensasi
 	CheckIn  *time.Time `json:"check_in"`
 	CheckOut *time.Time `json:"check_out"`
 	Notes    string     `gorm:"type:text" json:"notes"`
@@ -22,7 +22,7 @@ type AttendanceRequest struct {
 	UserID   string `json:"user_id"`
 	Date     string `json:"date"` // YYYY-MM-DD
 	Shift    uint   `json:"shift"`
-	Status   string `json:"status"` // Hadir, Izin, Sakit, Alfa
+	Status   string `json:"status"` // Pagi, Siang, Libur, Lembur, Bantu, Sakit, Dispensasi
 	CheckIn  string `json:"check_in"`
 	CheckOut string `json:"check_out"`
 	Notes    string `json:"notes"`
@@ -41,9 +41,12 @@ type AttendanceFilter struct {
 }
 
 type AttendanceSummary struct {
-	Hadir int64 `json:"hadir"`
-	Izin  int64 `json:"izin"`
-	Sakit int64 `json:"sakit"`
-	Alfa  int64 `json:"alfa"`
-	Total int64 `json:"total"`
+	Pagi       int64 `json:"pagi"`
+	Siang      int64 `json:"siang"`
+	Libur      int64 `json:"libur"`
+	Lembur     int64 `json:"lembur"`
+	Bantu      int64 `json:"bantu"`
+	Sakit      int64 `json:"sakit"`
+	Dispensasi int64 `json:"dispensasi"`
+	Total      int64 `json:"total"`
 }

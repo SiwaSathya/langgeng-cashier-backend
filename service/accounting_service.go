@@ -4,6 +4,7 @@ import (
 	"backend-cashier/domain"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -580,9 +581,10 @@ func (s *AccountingService) AutoPostSalesJournal(tx *gorm.DB, invoice string, pa
 		debetAccountName = "MANDIRI"
 	}
 
-	var debetAcc, salesAcc domain.Account
+	var debetAcc, salesAcc, ppnAcc domain.Account
 	tx.Where("LOWER(name) = ?", strings.ToLower(debetAccountName)).First(&debetAcc)
 	tx.Where("LOWER(name) = ?", "penjualan").First(&salesAcc)
+	tx.Where("LOWER(name) = ?", "ppn keluaran").First(&ppnAcc)
 
 	if debetAcc.ID == 0 || salesAcc.ID == 0 {
 		return
@@ -600,25 +602,43 @@ func (s *AccountingService) AutoPostSalesJournal(tx *gorm.DB, invoice string, pa
 		paid = amountPaid
 	}
 
+	// 4. Perhitungan PPN Keluaran (11%) & DPP Penjualan Dibulatkan:
+	// Contoh Kas 100.000 -> Penjualan (Kas / 1.11) = 90.090, PPN Keluaran = 9.910
+	dppPenjualan := math.Round(paid / 1.11)
+	ppnKeluaran := paid - dppPenjualan
+
+	items := []domain.JournalItem{
+		{
+			AccountID:   debetAcc.ID,
+			Description: fmt.Sprintf("Penerimaan %s", debetAccountName),
+			Debet:       paid,
+			Kredit:      0,
+		},
+		{
+			AccountID:   salesAcc.ID,
+			Description: "Pendapatan Penjualan",
+			Debet:       0,
+			Kredit:      dppPenjualan,
+		},
+	}
+
+	if ppnAcc.ID > 0 && ppnKeluaran > 0 {
+		items = append(items, domain.JournalItem{
+			AccountID:   ppnAcc.ID,
+			Description: "PPN Keluaran (11%)",
+			Debet:       0,
+			Kredit:      ppnKeluaran,
+		})
+	} else {
+		items[1].Kredit = paid
+	}
+
 	entry := domain.JournalEntry{
 		EntryNumber: entryNumber,
 		Date:        date,
 		Description: fmt.Sprintf("PENJUALAN NOTA %s (%s)", invoice, paymentMethod),
 		Reference:   invoice,
-		Items: []domain.JournalItem{
-			{
-				AccountID:   debetAcc.ID,
-				Description: fmt.Sprintf("Penerimaan %s", debetAccountName),
-				Debet:       paid,
-				Kredit:      0,
-			},
-			{
-				AccountID:   salesAcc.ID,
-				Description: "Pendapatan Penjualan",
-				Debet:       0,
-				Kredit:      paid,
-			},
-		},
+		Items:       items,
 	}
 
 	_ = tx.Create(&entry).Error
@@ -726,4 +746,195 @@ func (s *AccountingService) AutoPostPurchaseJournal(tx *gorm.DB, nota string, to
 		},
 	}
 	_ = tx.Create(&entry).Error
+}
+
+// -------------------------------------------------------------
+// PIUTANG DAGANG (ACCOUNTS RECEIVABLE)
+// -------------------------------------------------------------
+
+func (s *AccountingService) GetAllPiutang(f domain.PiutangFilter) ([]domain.PiutangDagang, int64, error) {
+	var records []domain.PiutangDagang
+	var total int64
+
+	query := s.DB.Model(&domain.PiutangDagang{}).Preload("Customer")
+
+	if f.StartDate != "" && f.EndDate != "" {
+		query = query.Where("tanggal BETWEEN ? AND ?", f.StartDate+" 00:00:00", f.EndDate+" 23:59:59")
+	}
+	if f.Status != "" {
+		query = query.Where("LOWER(status) = ?", strings.ToLower(f.Status))
+	}
+	if f.Search != "" {
+		pat := "%" + strings.ToLower(f.Search) + "%"
+		query = query.Where("LOWER(customer_name) LIKE ? OR LOWER(sales_invoice) LIKE ? OR LOWER(keterangan) LIKE ?", pat, pat, pat)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	page := f.Page
+	if page < 1 {
+		page = 1
+	}
+	limit := f.Limit
+	if limit < 1 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	err := query.Order("tanggal desc, id desc").Limit(limit).Offset(offset).Find(&records).Error
+	return records, total, err
+}
+
+func (s *AccountingService) CreatePiutang(req domain.PiutangDagangRequest) (*domain.PiutangDagang, error) {
+	if req.CustomerName == "" {
+		return nil, errors.New("nama pelanggan wajib diisi")
+	}
+
+	var tgl time.Time
+	var err error
+	if req.Tanggal != "" {
+		tgl, err = time.Parse("2006-01-02", req.Tanggal)
+		if err != nil {
+			tgl = time.Now()
+		}
+	} else {
+		tgl = time.Now()
+	}
+
+	saldoAkhir := req.SaldoAwal + req.Debet - req.Kredit
+	status := req.Status
+	if status == "" {
+		if saldoAkhir <= 0 {
+			status = "Lunas"
+		} else {
+			status = "Belum Lunas"
+		}
+	}
+
+	piutang := domain.PiutangDagang{
+		CustomerID:    req.CustomerID,
+		CustomerName:  req.CustomerName,
+		CustomerPhone: req.CustomerPhone,
+		SalesInvoice:  req.SalesInvoice,
+		Tanggal:       tgl,
+		SaldoAwal:     req.SaldoAwal,
+		Debet:         req.Debet,
+		Kredit:        req.Kredit,
+		SaldoAkhir:    saldoAkhir,
+		Keterangan:    req.Keterangan,
+		Status:        status,
+	}
+
+	if err := s.DB.Create(&piutang).Error; err != nil {
+		return nil, err
+	}
+
+	s.DB.Preload("Customer").First(&piutang, piutang.ID)
+	return &piutang, nil
+}
+
+func (s *AccountingService) GetPiutangByID(id uint) (*domain.PiutangDagang, error) {
+	var p domain.PiutangDagang
+	if err := s.DB.Preload("Customer").First(&p, id).Error; err != nil {
+		return nil, errors.New("data piutang tidak ditemukan")
+	}
+	return &p, nil
+}
+
+func (s *AccountingService) UpdatePiutang(id uint, req domain.PiutangDagangRequest) (*domain.PiutangDagang, error) {
+	var p domain.PiutangDagang
+	if err := s.DB.First(&p, id).Error; err != nil {
+		return nil, errors.New("data piutang tidak ditemukan")
+	}
+
+	updates := map[string]interface{}{}
+	if req.CustomerName != "" {
+		updates["customer_name"] = req.CustomerName
+	}
+	if req.CustomerPhone != "" {
+		updates["customer_phone"] = req.CustomerPhone
+	}
+	if req.SalesInvoice != "" {
+		updates["sales_invoice"] = req.SalesInvoice
+	}
+	if req.Tanggal != "" {
+		d, err := time.Parse("2006-01-02", req.Tanggal)
+		if err == nil {
+			updates["tanggal"] = d
+		}
+	}
+	updates["saldo_awal"] = req.SaldoAwal
+	updates["debet"] = req.Debet
+	updates["kredit"] = req.Kredit
+
+	saldoAkhir := req.SaldoAwal + req.Debet - req.Kredit
+	updates["saldo_akhir"] = saldoAkhir
+
+	if req.Status != "" {
+		updates["status"] = req.Status
+	} else {
+		if saldoAkhir <= 0 {
+			updates["status"] = "Lunas"
+		} else {
+			updates["status"] = "Belum Lunas"
+		}
+	}
+	updates["keterangan"] = req.Keterangan
+
+	if err := s.DB.Model(&p).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	s.DB.Preload("Customer").First(&p, id)
+	return &p, nil
+}
+
+func (s *AccountingService) DeletePiutang(id uint) error {
+	return s.DB.Delete(&domain.PiutangDagang{}, id).Error
+}
+
+func (s *AccountingService) AutoRecordSalesPiutang(tx *gorm.DB, customerID *uint, customerName, customerPhone, invoice string, totalNetto, amountPaid float64, date time.Time) {
+	if tx == nil {
+		tx = s.DB
+	}
+
+	sisaPiutang := totalNetto - amountPaid
+	status := "Belum Lunas"
+	if sisaPiutang <= 0 {
+		status = "Lunas"
+	}
+
+	p := domain.PiutangDagang{
+		CustomerID:    customerID,
+		CustomerName:  customerName,
+		CustomerPhone: customerPhone,
+		SalesInvoice:  invoice,
+		Tanggal:       date,
+		SaldoAwal:     0,
+		Debet:         totalNetto,
+		Kredit:        amountPaid,
+		SaldoAkhir:    sisaPiutang,
+		Keterangan:    fmt.Sprintf("Transaksi DP Nota %s", invoice),
+		Status:        status,
+	}
+
+	_ = tx.Create(&p).Error
+}
+
+func (s *AccountingService) AutoSettleSalesPiutang(tx *gorm.DB, invoice string, amountPaid float64) {
+	if tx == nil {
+		tx = s.DB
+	}
+
+	var p domain.PiutangDagang
+	if err := tx.Where("sales_invoice = ?", invoice).First(&p).Error; err == nil {
+		tx.Model(&p).Updates(map[string]interface{}{
+			"kredit":      p.Debet,
+			"saldo_akhir": 0,
+			"status":      "Lunas",
+			"keterangan":  p.Keterangan + " [LUNAS]",
+		})
+	}
 }

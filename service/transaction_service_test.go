@@ -229,6 +229,7 @@ func TestCreateSalesAndPelunasanPerNota(t *testing.T) {
 	}
 
 	// Clean up test data
+	database.Unscoped().Where("sales_invoice = ?", resp.Invoice).Delete(&domain.PiutangDagang{})
 	database.Unscoped().Where("invoice = ?", resp.Invoice).Delete(&domain.Sales{})
 	if salesList[0].CustomerID != nil {
 		database.Unscoped().Delete(&domain.Customer{}, *salesList[0].CustomerID)

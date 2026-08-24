@@ -64,7 +64,7 @@ func TestUserAndAttendanceService(t *testing.T) {
 		UserID:   userResp.ID,
 		Date:     todayStr,
 		Shift:    1,
-		Status:   "Hadir",
+		Status:   "Pagi",
 		CheckIn:  "08:00",
 		CheckOut: "16:00",
 		Notes:    "Hadir tepat waktu",
@@ -74,8 +74,8 @@ func TestUserAndAttendanceService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAttendance failed: %v", err)
 	}
-	if att.ID == 0 || att.Status != "Hadir" {
-		t.Fatalf("expected status Hadir, got %s", att.Status)
+	if att.ID == 0 || att.Status != "Pagi" {
+		t.Fatalf("expected status Pagi, got %s", att.Status)
 	}
 
 	defer func() {
@@ -87,8 +87,8 @@ func TestUserAndAttendanceService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSummary failed: %v", err)
 	}
-	if summary.Hadir < 1 {
-		t.Fatalf("expected at least 1 Hadir in summary, got %d", summary.Hadir)
+	if summary.Pagi < 1 {
+		t.Fatalf("expected at least 1 Pagi in summary, got %d", summary.Pagi)
 	}
 
 	// 5. Test Get Attendance List
@@ -335,5 +335,167 @@ func TestAnalyticsService(t *testing.T) {
 	}
 	if len(report.PeakHours) == 0 {
 		t.Fatalf("expected peak hours in report")
+	}
+}
+
+func TestSalesDeleteWithStockRollback(t *testing.T) {
+	setupFeatureTestDB(t)
+	database := db.Postgres.DB
+
+	accSvc := service.NewAccountingService(database)
+	trxSvc := service.NewTransactionService(database, accSvc)
+
+	var supplier domain.Supplier
+	database.FirstOrCreate(&supplier, domain.Supplier{ID: "SUPP-DEL", Name: "Supplier Delete"})
+
+	var category domain.Category
+	database.FirstOrCreate(&category, domain.Category{Name: "Category Delete"})
+
+	var brand domain.Brand
+	database.FirstOrCreate(&brand, domain.Brand{Name: "Brand Delete"})
+
+	var user domain.User
+	database.FirstOrCreate(&user, domain.User{ID: "USER-DEL-1", Name: "Admin Del", Username: "admin_del", Role: "admin", Location: "Toko Utama"})
+
+	initialStock := float64(50)
+	prod := domain.Product{
+		Kode:       fmt.Sprintf("PROD-DEL-%d", time.Now().UnixNano()%100000),
+		Nama:       "Produk Rollback Stock Test",
+		Saldo:      initialStock,
+		HBeli:      10000,
+		HJual:      25000,
+		SupplierID: supplier.ID,
+		CategoryID: category.ID,
+		BrandID:    brand.ID,
+	}
+	database.Create(&prod)
+	defer func() {
+		database.Unscoped().Where("product_id = ?", prod.ID).Delete(&domain.Sales{})
+		database.Unscoped().Delete(&prod)
+	}()
+
+	// 1. Create Sales of 5 items -> stock should become 45
+	res, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
+		Location:      "Toko Utama",
+		UserID:        user.ID,
+		MemberName:    "Pelanggan Rollback",
+		PaymentMethod: "Tunai",
+		AmountPaid:    125000,
+		Items: []domain.SalesItemRequest{
+			{ProductSearch: prod.Kode, Qty: 5, Price: 25000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSales failed: %v", err)
+	}
+
+	var prodAfterSale domain.Product
+	database.First(&prodAfterSale, prod.ID)
+	if prodAfterSale.Saldo != 45 {
+		t.Fatalf("expected stock 45 after sale of 5, got %f", prodAfterSale.Saldo)
+	}
+
+	// 2. Delete the sales transaction -> stock should be automatically restored to 50
+	err = trxSvc.DeleteSales(res.Invoice)
+	if err != nil {
+		t.Fatalf("DeleteSales failed: %v", err)
+	}
+
+	var prodAfterRollback domain.Product
+	database.First(&prodAfterRollback, prod.ID)
+	if prodAfterRollback.Saldo != initialStock {
+		t.Fatalf("expected stock restored to %f, but got %f", initialStock, prodAfterRollback.Saldo)
+	}
+
+	// 3. Verify sales records are deleted
+	var count int64
+	database.Model(&domain.Sales{}).Where("invoice = ?", res.Invoice).Count(&count)
+	if count != 0 {
+		t.Fatalf("expected 0 sales rows after delete, found %d", count)
+	}
+}
+
+func TestPPNFormulaAndPiutangDagang(t *testing.T) {
+	setupFeatureTestDB(t)
+	database := db.Postgres.DB
+
+	accSvc := service.NewAccountingService(database)
+	trxSvc := service.NewTransactionService(database, accSvc)
+
+	var supplier domain.Supplier
+	database.FirstOrCreate(&supplier, domain.Supplier{ID: "SUPP-PPN", Name: "Supplier PPN"})
+
+	var category domain.Category
+	database.FirstOrCreate(&category, domain.Category{Name: "Category PPN"})
+
+	var brand domain.Brand
+	database.FirstOrCreate(&brand, domain.Brand{Name: "Brand PPN"})
+
+	var user domain.User
+	database.FirstOrCreate(&user, domain.User{ID: "USER-PPN-1", Name: "Kasir PPN", Username: "kasir_ppn", Role: "kasir", Location: "Toko Utama"})
+
+	prod := domain.Product{
+		Kode:       fmt.Sprintf("PROD-PPN-%d", time.Now().UnixNano()%100000),
+		Nama:       "Produk PPN 100K",
+		Saldo:      10,
+		HBeli:      50000,
+		HJual:      100000,
+		SupplierID: supplier.ID,
+		CategoryID: category.ID,
+		BrandID:    brand.ID,
+	}
+	database.Create(&prod)
+	defer database.Unscoped().Delete(&prod)
+
+	// 1. Create Sales of Rp 100.000 with DP Rp 40.000
+	res, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
+		Location:      "Toko Utama",
+		UserID:        user.ID,
+		MemberName:    "Pelanggan PPN",
+		PaymentMethod: "Tunai",
+		AmountPaid:    40000,
+		IsDp:          true,
+		Customer: domain.CustomerRequest{
+			Name:        "Customer Piutang",
+			PhoneNumber: "081299999",
+		},
+		Items: []domain.SalesItemRequest{
+			{ProductSearch: prod.Kode, Qty: 1, Price: 100000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSales failed: %v", err)
+	}
+	defer database.Unscoped().Where("invoice = ?", res.Invoice).Delete(&domain.Sales{})
+	defer database.Unscoped().Where("sales_invoice = ?", res.Invoice).Delete(&domain.PiutangDagang{})
+
+	// 2. Verify Piutang Dagang was automatically recorded
+	var p domain.PiutangDagang
+	if err := database.Where("sales_invoice = ?", res.Invoice).First(&p).Error; err != nil {
+		t.Fatalf("expected PiutangDagang auto created for DP sale: %v", err)
+	}
+	if p.SaldoAkhir != 60000 {
+		t.Fatalf("expected sisa piutang 60000, got %f", p.SaldoAkhir)
+	}
+	if p.Status != "Belum Lunas" {
+		t.Fatalf("expected status Belum Lunas, got %s", p.Status)
+	}
+
+	// 3. Pelunasan Sales
+	_, err = trxSvc.PelunasanSales(res.Invoice, domain.PelunasanRequest{
+		PaymentMethod: "Transfer BCA",
+		AmountPaid:    100000,
+		IsDp:          false,
+		Status:        "Lunas",
+	})
+	if err != nil {
+		t.Fatalf("PelunasanSales failed: %v", err)
+	}
+
+	// 4. Verify Piutang settled
+	var pSettled domain.PiutangDagang
+	database.Where("sales_invoice = ?", res.Invoice).First(&pSettled)
+	if pSettled.SaldoAkhir != 0 || pSettled.Status != "Lunas" {
+		t.Fatalf("expected piutang saldo akhir 0 and status Lunas, got %f (%s)", pSettled.SaldoAkhir, pSettled.Status)
 	}
 }
