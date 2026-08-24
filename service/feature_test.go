@@ -17,6 +17,7 @@ func setupFeatureTestDB(t *testing.T) {
 	if db.Postgres.DB == nil {
 		t.Skip("Database not available, skipping integration test")
 	}
+	db.RegisterTableToMigrate(db.Postgres.DB)
 }
 
 func TestUserAndAttendanceService(t *testing.T) {
@@ -194,6 +195,127 @@ func TestAccountingService(t *testing.T) {
 	}
 	if len(ledger) == 0 {
 		t.Fatalf("expected ledger card for KAS")
+	}
+}
+
+func TestShiftIsolationPerStore(t *testing.T) {
+	setupFeatureTestDB(t)
+	database := db.Postgres.DB
+
+	accSvc := service.NewAccountingService(database)
+	trxSvc := service.NewTransactionService(database, accSvc)
+
+	var supplier domain.Supplier
+	database.FirstOrCreate(&supplier, domain.Supplier{ID: "SUPP-ISO", Name: "Supplier ISO"})
+
+	var category domain.Category
+	database.FirstOrCreate(&category, domain.Category{Name: "Category ISO"})
+
+	var brand domain.Brand
+	database.FirstOrCreate(&brand, domain.Brand{Name: "Brand ISO"})
+
+	var user domain.User
+	database.FirstOrCreate(&user, domain.User{ID: "USER-ISO-1", Name: "Kasir ISO", Username: "kasir_iso", Role: "kasir", Location: "Toko Utama"})
+
+	// Create test products
+	prod := domain.Product{
+		Kode:       fmt.Sprintf("PROD-ISO-%d", time.Now().UnixNano()%100000),
+		Nama:       fmt.Sprintf("Produk Isolation Test %d", time.Now().UnixNano()%100000),
+		Saldo:      100,
+		HBeli:      10000,
+		HJual:      20000,
+		SupplierID: supplier.ID,
+		CategoryID: category.ID,
+		BrandID:    brand.ID,
+	}
+	if err := database.Create(&prod).Error; err != nil {
+		t.Fatalf("failed to create test product: %v", err)
+	}
+	defer database.Unscoped().Delete(&prod)
+
+	// 1. Create Sales in Toko Utama (shift IS NULL)
+	resUtama, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
+		Location:      "Toko Utama",
+		UserID:        user.ID,
+		MemberName:    "Pelanggan Utama",
+		PaymentMethod: "Tunai",
+		AmountPaid:    20000,
+		Items: []domain.SalesItemRequest{
+			{ProductSearch: prod.Kode, Qty: 1, Price: 20000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSales Toko Utama failed: %v", err)
+	}
+	defer database.Unscoped().Where("invoice = ?", resUtama.Invoice).Delete(&domain.Sales{})
+
+	// 2. Create Sales in Toko Sudirman (shift IS NULL)
+	resSudirman, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
+		Location:      "Toko Sudirman",
+		UserID:        user.ID,
+		MemberName:    "Pelanggan Sudirman",
+		PaymentMethod: "Tunai",
+		AmountPaid:    20000,
+		Items: []domain.SalesItemRequest{
+			{ProductSearch: prod.Kode, Qty: 1, Price: 20000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSales Toko Sudirman failed: %v", err)
+	}
+	defer database.Unscoped().Where("invoice = ?", resSudirman.Invoice).Delete(&domain.Sales{})
+
+	var checkSudirman domain.Sales
+	database.Where("invoice = ?", resSudirman.Invoice).First(&checkSudirman)
+	if checkSudirman.Location != "Toko Sudirman" {
+		t.Fatalf("expected checkSudirman location 'Toko Sudirman', got '%s'", checkSudirman.Location)
+	}
+
+	// 3. Close Shift ONLY in Toko Utama -> Shift 1
+	err = trxSvc.UpdateSalesShift(1, "Toko Utama")
+	if err != nil {
+		t.Fatalf("UpdateSalesShift Toko Utama failed: %v", err)
+	}
+
+	// 4. Verify Toko Utama sales has shift = 1
+	var sUtama domain.Sales
+	database.Where("invoice = ?", resUtama.Invoice).First(&sUtama)
+	if sUtama.Shift == nil || *sUtama.Shift != 1 {
+		t.Fatalf("expected Toko Utama sales shift to be 1, got %v", sUtama.Shift)
+	}
+
+	// 5. Verify Toko Sudirman sales STILL HAS shift IS NULL (isolated and unaffected!)
+	var sSudirman domain.Sales
+	database.Where("invoice = ?", resSudirman.Invoice).First(&sSudirman)
+	if sSudirman.Shift != nil {
+		t.Fatalf("expected Toko Sudirman sales shift to still be nil (unaffected), but got %v", *sSudirman.Shift)
+	}
+
+	// 6. Verify GetReceipt for Toko Sudirman still returns its unshifted transaction
+	receiptSudirman, err := trxSvc.GetReceipt("Toko Sudirman")
+	if err != nil {
+		t.Fatalf("GetReceipt Toko Sudirman failed: %v", err)
+	}
+	foundSudirman := false
+	for _, s := range receiptSudirman.Sales {
+		if s.Invoice == resSudirman.Invoice {
+			foundSudirman = true
+			break
+		}
+	}
+	if !foundSudirman {
+		t.Fatalf("expected unshifted transaction to be in Toko Sudirman receipt")
+	}
+
+	// 7. Verify GetReceipt for Toko Utama does NOT contain the closed shift transactions
+	receiptUtama, err := trxSvc.GetReceipt("Toko Utama")
+	if err != nil {
+		t.Fatalf("GetReceipt Toko Utama failed: %v", err)
+	}
+	for _, s := range receiptUtama.Sales {
+		if s.Invoice == resUtama.Invoice {
+			t.Fatalf("expected closed Toko Utama transaction NOT to be in unshifted receipt")
+		}
 	}
 }
 

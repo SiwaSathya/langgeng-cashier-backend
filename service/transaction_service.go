@@ -31,7 +31,7 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 
 	invoice := req.Invoice
 	if invoice == "" {
-		invoice = fmt.Sprintf("PJL-%d", time.Now().Unix())
+		invoice = fmt.Sprintf("PJL-%d", time.Now().UnixNano())
 	}
 
 	// Tentukan lokasi toko (Toko Utama / Toko Sudirman / Toko Paye)
@@ -452,12 +452,17 @@ func (s *TransactionService) GetCurrentShift(location string) uint {
 	todayStart := time.Now().Format("2006-01-02") + " 00:00:00"
 	todayEnd := time.Now().Format("2006-01-02") + " 23:59:59"
 
+	loc := strings.TrimSpace(location)
+	if loc == "" || strings.EqualFold(loc, "Pusat") {
+		loc = "Toko Utama"
+	}
+
 	var count int64
 	q := s.DB.Model(&domain.Sales{}).
 		Where("created_at BETWEEN ? AND ? AND shift IS NOT NULL", todayStart, todayEnd)
 
-	if location != "" && !strings.EqualFold(location, "Semua Toko") && !strings.EqualFold(location, "Pusat") {
-		q = q.Where("location = ?", location)
+	if !strings.EqualFold(loc, "Semua Toko") {
+		q = q.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
 	}
 
 	q.Count(&count)
@@ -470,15 +475,20 @@ func (s *TransactionService) GetCurrentShift(location string) uint {
 }
 
 func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptResponse, error) {
+	loc := strings.TrimSpace(location)
+	if loc == "" || strings.EqualFold(loc, "Pusat") {
+		loc = "Toko Utama"
+	}
+
 	var sales []domain.Sales
 	var expenses []domain.Expense
 
 	salesQuery := s.DB.Preload("Product").Preload("User").Preload("Customer").Where("shift IS NULL")
 	expenseQuery := s.DB.Where("tanggal >= ?", time.Now().Format("2006-01-02"))
 
-	if location != "" && !strings.EqualFold(location, "Semua Toko") && !strings.EqualFold(location, "Pusat") {
-		salesQuery = salesQuery.Where("location = ?", location)
-		expenseQuery = expenseQuery.Where("location = ?", location)
+	if !strings.EqualFold(loc, "Semua Toko") {
+		salesQuery = salesQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+		expenseQuery = expenseQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
 	}
 
 	if err := salesQuery.Find(&sales).Error; err != nil {
@@ -491,16 +501,23 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 
 	return &domain.ReceiptResponse{
 		Category: "SHIFT_RECEIPT",
-		Location: location,
+		Location: loc,
 		Sales:    sales,
 		Expenses: expenses,
 	}, nil
 }
 
 func (s *TransactionService) UpdateSalesShift(shift uint, location string) error {
-	q := s.DB.Model(&domain.Sales{}).Where("shift IS NULL")
-	if location != "" && !strings.EqualFold(location, "Semua Toko") && !strings.EqualFold(location, "Pusat") {
-		q = q.Where("location = ?", location)
+	loc := strings.TrimSpace(location)
+	if loc == "" || strings.EqualFold(loc, "Pusat") {
+		loc = "Toko Utama"
 	}
+
+	q := s.DB.Model(&domain.Sales{}).Where("shift IS NULL")
+
+	if !strings.EqualFold(loc, "Semua Toko") {
+		q = q.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+	}
+
 	return q.Update("shift", shift).Error
 }

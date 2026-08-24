@@ -22,6 +22,7 @@ func setupTestApp(t *testing.T) (*fiber.App, *service.TransactionService) {
 	if db.Postgres.DB == nil {
 		t.Skip("Database not available, skipping integration test")
 	}
+	db.RegisterTableToMigrate(db.Postgres.DB)
 
 	accSvc := service.NewAccountingService(db.Postgres.DB)
 	svc := service.NewTransactionService(db.Postgres.DB, accSvc)
