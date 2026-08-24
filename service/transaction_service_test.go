@@ -17,7 +17,8 @@ func setupTestDB(t *testing.T) *service.TransactionService {
 	if db.Postgres.DB == nil {
 		t.Skip("Database not available, skipping integration test")
 	}
-	return service.NewTransactionService(db.Postgres.DB)
+	accSvc := service.NewAccountingService(db.Postgres.DB)
+	return service.NewTransactionService(db.Postgres.DB, accSvc)
 }
 
 func TestCreateSalesAndPelunasanPerNota(t *testing.T) {

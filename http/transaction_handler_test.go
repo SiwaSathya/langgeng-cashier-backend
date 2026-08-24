@@ -23,7 +23,8 @@ func setupTestApp(t *testing.T) (*fiber.App, *service.TransactionService) {
 		t.Skip("Database not available, skipping integration test")
 	}
 
-	svc := service.NewTransactionService(db.Postgres.DB)
+	accSvc := service.NewAccountingService(db.Postgres.DB)
+	svc := service.NewTransactionService(db.Postgres.DB, accSvc)
 	handler := localHttp.NewTransactionHandler(svc)
 
 	app := fiber.New()

@@ -98,6 +98,7 @@ func (h *TransactionHandler) UpdateSalesShift(
 
 	err := h.Service.UpdateSalesShift(
 		req.Shift,
+		req.Location,
 	)
 
 	if err != nil {
@@ -112,8 +113,9 @@ func (h *TransactionHandler) UpdateSalesShift(
 
 	return c.JSON(
 		fiber.Map{
-			"message": "Shift transaksi berhasil diperbarui",
-			"shift":   req.Shift,
+			"message":  "Shift transaksi berhasil diperbarui",
+			"shift":    req.Shift,
+			"location": req.Location,
 		},
 	)
 }
@@ -125,7 +127,8 @@ func (h *TransactionHandler) UpdateSalesShift(
 func (h *TransactionHandler) GetReceipt(
 	c *fiber.Ctx,
 ) error {
-	results, err := h.Service.GetReceipt()
+	location := c.Query("location")
+	results, err := h.Service.GetReceipt(location)
 
 	if err != nil {
 		return c.Status(500).JSON(
@@ -138,6 +141,7 @@ func (h *TransactionHandler) GetReceipt(
 	return c.JSON(
 		domain.ReceiptResponse{
 			Category: results.Category,
+			Location: results.Location,
 			Sales:    results.Sales,
 			Expenses: results.Expenses,
 		},
@@ -237,12 +241,16 @@ func (h *TransactionHandler) GetSales(c *fiber.Ctx) error {
 	end := c.Query("end_date")
 	member := c.Query("member")
 	method := c.Query("method")
+	location := c.Query("location")
+	userLocation := c.Query("user_location")
 
 	filter := domain.SalesFilter{
-		StartDate: start,
-		EndDate:   end,
-		Member:    member,
-		Method:    method,
+		StartDate:    start,
+		EndDate:      end,
+		Member:       member,
+		Method:       method,
+		Location:     location,
+		UserLocation: userLocation,
 	}
 
 	results, err := h.Service.GetAllSales(filter)
@@ -364,11 +372,13 @@ func (h *TransactionHandler) PutPelunasanSales(c *fiber.Ctx) error {
 func (h *TransactionHandler) GetCurrentShift(
 	c *fiber.Ctx,
 ) error {
-	shift := h.Service.GetCurrentShift()
+	location := c.Query("location")
+	shift := h.Service.GetCurrentShift(location)
 
 	return c.JSON(
 		fiber.Map{
-			"shift": shift,
+			"shift":    shift,
+			"location": location,
 		},
 	)
 }

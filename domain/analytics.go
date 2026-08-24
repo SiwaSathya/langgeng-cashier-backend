@@ -50,13 +50,24 @@ type CategoryMarginItem struct {
 type StaffPerformanceItem struct {
 	UserID         string  `json:"user_id"`
 	StaffName      string  `json:"staff_name"`
+	Location       string  `json:"location"`
 	TotalOmset     float64 `json:"total_omset"`
 	TotalTransaksi int64   `json:"total_transaksi"`
+	TargetPct      float64 `json:"target_pct"`
 }
 
 type PeakHourItem struct {
 	Hour  string `json:"hour"`  // "09:00", "11:00", etc.
 	Count int64  `json:"count"` // transaction count
+}
+
+type SWOTItem struct {
+	Category    string `json:"category"`
+	Type        string `json:"type"` // "Margin", "Volume", "Seasonal", etc.
+	Strength    string `json:"strength"`
+	Weakness    string `json:"weakness"`
+	Opportunity string `json:"opportunity"`
+	Threat      string `json:"threat"`
 }
 
 type AnalyticsReportResponse struct {
@@ -69,4 +80,5 @@ type AnalyticsReportResponse struct {
 	CategoryMargins  []CategoryMarginItem   `json:"category_margins"`
 	StaffLeaderboard []StaffPerformanceItem `json:"staff_leaderboard"`
 	PeakHours        []PeakHourItem         `json:"peak_hours"`
+	SWOT             []SWOTItem             `json:"swot"`
 }

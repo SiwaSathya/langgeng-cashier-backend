@@ -6,7 +6,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// domain/purchase.go
 type Purchase struct {
 	gorm.Model
 	Nota       string    `gorm:"index" json:"nota"`
@@ -19,4 +18,7 @@ type Purchase struct {
 	HBeli      float64   `json:"h_beli"`
 	HargaJual  float64   `gorm:"-" json:"harga_jual"`
 	Total      float64   `json:"total"`
+	UserID     string    `gorm:"size:100;index" json:"user_id"`
+	User       User      `gorm:"foreignKey:UserID" json:"user"`
+	Location   string    `gorm:"size:100;index" json:"location"` // Toko Utama, Toko Sudirman, Toko Paye
 }

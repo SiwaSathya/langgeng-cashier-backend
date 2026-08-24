@@ -30,6 +30,7 @@ func (h *AccountingHandler) RegisterRoutes(app *fiber.App) {
 	api.Get("/journals", h.GetAllJournalEntries)
 	api.Post("/journals", h.CreateJournalEntry)
 	api.Get("/journals/:id", h.GetJournalEntryByID)
+	api.Put("/journals/:id", h.UpdateJournalEntry)
 	api.Delete("/journals/:id", h.DeleteJournalEntry)
 
 	// Rekapitulasi & Buku Besar
@@ -198,6 +199,34 @@ func (h *AccountingHandler) GetJournalEntryByID(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(result)
+}
+
+func (h *AccountingHandler) UpdateJournalEntry(c *fiber.Ctx) error {
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "ID jurnal tidak valid",
+		})
+	}
+
+	var req domain.CreateJournalRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Format request tidak valid: " + err.Error(),
+		})
+	}
+
+	result, err := h.Service.UpdateJournalEntry(uint(id), req)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Transaksi jurnal berhasil diperbarui",
+		"data":    result,
+	})
 }
 
 func (h *AccountingHandler) DeleteJournalEntry(c *fiber.Ctx) error {

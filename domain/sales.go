@@ -9,12 +9,14 @@ import (
 // Sale untuk transaksi Kasir
 type Sales struct {
 	gorm.Model
-	Invoice       string   `json:"invoice"`
+	Invoice       string   `gorm:"index" json:"invoice"`
 	ProductID     uint     `json:"product_id"`
-	Product       Product  `gorm:"foreignKey:ProductID"`
-	MemberName    string   `json:"member_name"` // Dari field 'Member' di gambar
+	Product       Product  `gorm:"foreignKey:ProductID" json:"product"`
+	MemberName    string   `json:"member_name"`
 	Qty           float64  `json:"qty"`
-	UserID        string   `json:"user_id"`
+	UserID        string   `gorm:"size:100;index" json:"user_id"`
+	User          User     `gorm:"foreignKey:UserID" json:"user"`
+	Location      string   `gorm:"size:100;index" json:"location"` // Toko Utama, Toko Sudirman, Toko Paye
 	HBeli         float64  `json:"h_beli"`
 	HJual         float64  `json:"h_jual"`
 	Discount      float64  `json:"discount"`    // Potongan harga
@@ -26,8 +28,7 @@ type Sales struct {
 	CustomerID    *uint    `gorm:"nullable" json:"customer_id"`
 	Status        string   `json:"status"`
 	Shift         *uint    `gorm:"nullable" json:"shift"`
-	Customer      Customer `gorm:"foreignKey:CustomerID"`
-	User          User     `gorm:"foreignKey:UserID"`
+	Customer      Customer `gorm:"foreignKey:CustomerID" json:"customer"`
 }
 
 type SalesResponse struct {
@@ -38,12 +39,14 @@ type SalesResponse struct {
 	Invoice       string          `json:"invoice"`
 	ProductID     uint            `json:"product_id,omitempty"`
 	Product       ProductResponse `gorm:"foreignKey:ProductID" json:"product,omitempty"`
-	MemberName    string          `json:"member_name,omitempty"` // Dari field 'Member' di gambar
+	MemberName    string          `json:"member_name,omitempty"`
+	UserID        string          `json:"user_id,omitempty"`
+	Location      string          `json:"location,omitempty"`
 	Qty           float64         `json:"qty,omitempty"`
 	HBeli         float64         `json:"h_beli,omitempty"`
 	HJual         float64         `json:"h_jual,omitempty"`
-	Discount      float64         `json:"discount,omitempty"`    // Potongan harga
-	TotalNetto    float64         `json:"total_netto,omitempty"` // Harga setelah diskon
+	Discount      float64         `json:"discount,omitempty"`
+	TotalNetto    float64         `json:"total_netto,omitempty"`
 	PaymentMethod string          `json:"payment_method,omitempty"`
 	AmountPaid    float64         `json:"amount_paid"`
 	Change        float64         `json:"change"`
@@ -62,6 +65,7 @@ type CreateTransactionRequest struct {
 	Invoice       string             `json:"invoice,omitempty" example:"PJL-123456"`
 	MemberName    string             `json:"member_name" example:"Desak"`
 	UserID        string             `json:"user_id" example:"123"`
+	Location      string             `json:"location" example:"Toko Utama"`
 	PaymentMethod string             `json:"payment_method" example:"Bayar Tunai"`
 	AmountPaid    float64            `json:"amount_paid" example:"2500000"`
 	IsDp          bool               `json:"is_dp" example:"false"`
@@ -73,6 +77,7 @@ type SalesRequest struct {
 	ProductSearch string          `json:"product_search" example:"POLY 32RG9059"`
 	MemberName    string          `json:"member_name" example:"Desak"`
 	UserID        string          `json:"user_id" example:"123"`
+	Location      string          `json:"location" example:"Toko Utama"`
 	Qty           float64         `json:"qty" example:"1"`
 	Price         float64         `json:"price" example:"20000"`
 	Discount      float64         `json:"discount" example:"0"`
@@ -110,6 +115,7 @@ type SalesTransactionGroup struct {
 	MemberName      string    `json:"member_name"`
 	UserID          string    `json:"user_id"`
 	User            User      `json:"user"`
+	Location        string    `json:"location"`
 	CustomerID      *uint     `json:"customer_id"`
 	Customer        Customer  `json:"customer"`
 	PaymentMethod   string    `json:"payment_method"`
@@ -126,20 +132,22 @@ type SalesTransactionGroup struct {
 
 // Struct untuk filter Sales
 type SalesFilter struct {
-	StartDate string `query:"start_date"`
-	EndDate   string `query:"end_date"`
-	Member    string `query:"member"`
-	Method    string `query:"method"`
+	StartDate    string `query:"start_date"`
+	EndDate      string `query:"end_date"`
+	Member       string `query:"member"`
+	Method       string `query:"method"`
+	Location     string `query:"location"`
+	UserLocation string `query:"user_location"`
 }
 
 type UpdateShiftRequest struct {
-	Shift uint `json:"shift"`
+	Shift    uint   `json:"shift"`
+	Location string `json:"location"`
 }
 
 type ReceiptResponse struct {
 	Category string `json:"category"`
-
-	Sales []Sales `json:"sales"`
-
+	Location string `json:"location,omitempty"`
+	Sales    []Sales `json:"sales"`
 	Expenses []Expense `json:"expenses"`
 }

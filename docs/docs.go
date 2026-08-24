@@ -634,6 +634,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/domain.SalesItemRequest"
                     }
                 },
+                "location": {
+                    "type": "string",
+                    "example": "Toko Utama"
+                },
                 "member_name": {
                     "type": "string",
                     "example": "Desak"
@@ -932,8 +936,11 @@ const docTemplate = `{
                 "is_dp": {
                     "type": "boolean"
                 },
+                "location": {
+                    "description": "Toko Utama, Toko Sudirman, Toko Paye",
+                    "type": "string"
+                },
                 "member_name": {
-                    "description": "Dari field 'Member' di gambar",
                     "type": "string"
                 },
                 "payment_method": {
@@ -1006,7 +1013,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "discount": {
-                    "description": "Potongan harga",
                     "type": "number"
                 },
                 "h_beli": {
@@ -1024,8 +1030,10 @@ const docTemplate = `{
                 "is_dp": {
                     "type": "boolean"
                 },
+                "location": {
+                    "type": "string"
+                },
                 "member_name": {
-                    "description": "Dari field 'Member' di gambar",
                     "type": "string"
                 },
                 "payment_method": {
@@ -1044,10 +1052,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "total_netto": {
-                    "description": "Harga setelah diskon",
                     "type": "number"
                 },
                 "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -1081,6 +1091,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/domain.Sales"
                     }
+                },
+                "location": {
+                    "type": "string"
                 },
                 "member_name": {
                     "type": "string"

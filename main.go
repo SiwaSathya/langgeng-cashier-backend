@@ -22,15 +22,15 @@ import (
 // @BasePath        /
 func main() {
 	Init()
+	accountingService := service.NewAccountingService(db.Postgres.DB)
 	prodService := service.NewProductService(db.Postgres.DB)
-	trxService := service.NewTransactionService(db.Postgres.DB)
-	purchaseService := service.NewPurchaseService(db.Postgres.DB)
+	trxService := service.NewTransactionService(db.Postgres.DB, accountingService)
+	purchaseService := service.NewPurchaseService(db.Postgres.DB, accountingService)
 	masterService := service.NewMasterService(db.Postgres.DB)
-	expenseService := service.NewExpenseService(db.Postgres.DB)
+	expenseService := service.NewExpenseService(db.Postgres.DB, accountingService)
 	authService := service.NewAuthService(db.Postgres.DB)
 	returService := service.NewReturService(db.Postgres.DB)
 	attendanceService := service.NewAttendanceService(db.Postgres.DB)
-	accountingService := service.NewAccountingService(db.Postgres.DB)
 	analyticsService := service.NewAnalyticsService(db.Postgres.DB)
 
 	trxHandler := http.NewTransactionHandler(trxService)

@@ -88,7 +88,6 @@ func (s *AccountingService) GetAllAccounts() ([]domain.Account, error) {
 		return nil, err
 	}
 
-	// Hitung saldo berjalan untuk masing-masing akun
 	for i := range accounts {
 		var debetSum, kreditSum float64
 		s.DB.Model(&domain.JournalItem{}).Where("account_id = ?", accounts[i].ID).Select("COALESCE(SUM(debet), 0)").Scan(&debetSum)
@@ -163,7 +162,6 @@ func (s *AccountingService) UpdateAccount(id uint, input domain.Account) (*domai
 }
 
 func (s *AccountingService) DeleteAccount(id uint) error {
-	// Cek apakah ada jurnal yang memakai akun ini
 	var count int64
 	s.DB.Model(&domain.JournalItem{}).Where("account_id = ?", id).Count(&count)
 	if count > 0 {
@@ -207,7 +205,6 @@ func (s *AccountingService) CreateJournalEntry(req domain.CreateJournalRequest) 
 			if err == nil {
 				accountID = acc.ID
 			} else {
-				// Buat akun baru otomatis jika belum ada
 				acc = domain.Account{
 					Code:           fmt.Sprintf("ACC-%d", time.Now().UnixNano()%10000),
 					Name:           itemReq.AccountName,
@@ -234,7 +231,6 @@ func (s *AccountingService) CreateJournalEntry(req domain.CreateJournalRequest) 
 		})
 	}
 
-	// Validasi Keseimbangan Debet == Kredit
 	diff := totalDebet - totalKredit
 	if diff < -0.01 || diff > 0.01 {
 		return nil, fmt.Errorf("jurnal tidak seimbang! Total Debet (IDR %.2f) != Total Kredit (IDR %.2f), Selisih: IDR %.2f", totalDebet, totalKredit, diff)
@@ -251,6 +247,88 @@ func (s *AccountingService) CreateJournalEntry(req domain.CreateJournalRequest) 
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
 		return tx.Create(&entry).Error
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	s.DB.Preload("Items.Account").First(&entry, entry.ID)
+	return &entry, nil
+}
+
+func (s *AccountingService) UpdateJournalEntry(id uint, req domain.CreateJournalRequest) (*domain.JournalEntry, error) {
+	var entry domain.JournalEntry
+	if err := s.DB.Preload("Items").First(&entry, id).Error; err != nil {
+		return nil, errors.New("jurnal transaksi tidak ditemukan")
+	}
+
+	if len(req.Items) < 2 {
+		return nil, errors.New("jurnal harus memiliki minimal 2 baris (Debet dan Kredit)")
+	}
+
+	var entryDate time.Time
+	var err error
+	if req.Date != "" {
+		entryDate, err = time.Parse("2006-01-02", req.Date)
+		if err != nil {
+			entryDate, _ = time.Parse(time.RFC3339, req.Date)
+		}
+	}
+	if entryDate.IsZero() {
+		entryDate = entry.Date
+	}
+
+	var totalDebet, totalKredit float64
+	var newItems []domain.JournalItem
+
+	for _, itemReq := range req.Items {
+		var accountID = itemReq.AccountID
+		if accountID == 0 && itemReq.AccountName != "" {
+			var acc domain.Account
+			if err := s.DB.Where("LOWER(name) = ?", strings.ToLower(itemReq.AccountName)).First(&acc).Error; err == nil {
+				accountID = acc.ID
+			}
+		}
+
+		if accountID == 0 {
+			return nil, errors.New("setiap baris jurnal harus memiliki akun yang valid")
+		}
+
+		totalDebet += itemReq.Debet
+		totalKredit += itemReq.Kredit
+
+		newItems = append(newItems, domain.JournalItem{
+			JournalEntryID: entry.ID,
+			AccountID:      accountID,
+			Description:    itemReq.Description,
+			Debet:          itemReq.Debet,
+			Kredit:         itemReq.Kredit,
+		})
+	}
+
+	diff := totalDebet - totalKredit
+	if diff < -0.01 || diff > 0.01 {
+		return nil, fmt.Errorf("jurnal tidak seimbang! Total Debet (IDR %.2f) != Total Kredit (IDR %.2f), Selisih: IDR %.2f", totalDebet, totalKredit, diff)
+	}
+
+	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&entry).Updates(map[string]interface{}{
+			"date":        entryDate,
+			"description": req.Description,
+			"reference":   req.Reference,
+		}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("journal_entry_id = ?", entry.ID).Delete(&domain.JournalItem{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&newItems).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +473,6 @@ func (s *AccountingService) GetGeneralLedger(startDate, endDate string, accountI
 	var cards []domain.LedgerAccountCard
 
 	for _, acc := range accounts {
-		// 1. Hitung Saldo Awal sebelum startDate
 		var prevDebet, prevKredit float64
 		s.DB.Table("journal_items").
 			Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
@@ -412,7 +489,6 @@ func (s *AccountingService) GetGeneralLedger(startDate, endDate string, accountI
 			initBalance = acc.InitialBalance + prevKredit - prevDebet
 		}
 
-		// 2. Ambil transaksi pada periode startDate s/d endDate
 		type ItemRow struct {
 			ID          uint      `json:"id"`
 			Date        time.Time `json:"date"`
@@ -479,4 +555,175 @@ func (s *AccountingService) GetGeneralLedger(startDate, endDate string, accountI
 	}
 
 	return cards, nil
+}
+
+// -------------------------------------------------------------
+// AUTOMATIC JOURNAL POSTING HELPERS (SEAMLESS DOUBLE ENTRY)
+// -------------------------------------------------------------
+
+func (s *AccountingService) AutoPostSalesJournal(tx *gorm.DB, invoice string, paymentMethod string, totalNetto, amountPaid float64, isDp bool, date time.Time) {
+	if tx == nil {
+		tx = s.DB
+	}
+
+	debetAccountName := "KAS"
+	methodUpper := strings.ToUpper(paymentMethod)
+	if strings.Contains(methodUpper, "BCA") {
+		debetAccountName = "BCA"
+	} else if strings.Contains(methodUpper, "BRI 4560") {
+		debetAccountName = "BRI 4560"
+	} else if strings.Contains(methodUpper, "BRI") {
+		debetAccountName = "BRI 5563"
+	} else if strings.Contains(methodUpper, "BNI 3815") || strings.Contains(methodUpper, "BNI") {
+		debetAccountName = "BNI 3815"
+	} else if strings.Contains(methodUpper, "MANDIRI") {
+		debetAccountName = "MANDIRI"
+	}
+
+	var debetAcc, salesAcc domain.Account
+	tx.Where("LOWER(name) = ?", strings.ToLower(debetAccountName)).First(&debetAcc)
+	tx.Where("LOWER(name) = ?", "penjualan").First(&salesAcc)
+
+	if debetAcc.ID == 0 || salesAcc.ID == 0 {
+		return
+	}
+
+	entryNumber := fmt.Sprintf("JV-SALES-%s", invoice)
+
+	var existing domain.JournalEntry
+	if err := tx.Where("entry_number = ?", entryNumber).First(&existing).Error; err == nil {
+		return
+	}
+
+	paid := totalNetto
+	if isDp && amountPaid > 0 {
+		paid = amountPaid
+	}
+
+	entry := domain.JournalEntry{
+		EntryNumber: entryNumber,
+		Date:        date,
+		Description: fmt.Sprintf("PENJUALAN NOTA %s (%s)", invoice, paymentMethod),
+		Reference:   invoice,
+		Items: []domain.JournalItem{
+			{
+				AccountID:   debetAcc.ID,
+				Description: fmt.Sprintf("Penerimaan %s", debetAccountName),
+				Debet:       paid,
+				Kredit:      0,
+			},
+			{
+				AccountID:   salesAcc.ID,
+				Description: "Pendapatan Penjualan",
+				Debet:       0,
+				Kredit:      paid,
+			},
+		},
+	}
+
+	_ = tx.Create(&entry).Error
+}
+
+func (s *AccountingService) AutoPostExpenseJournal(tx *gorm.DB, nota, deskripsi, kategori string, total float64, date time.Time) {
+	if tx == nil {
+		tx = s.DB
+	}
+
+	var kasAcc domain.Account
+	tx.Where("LOWER(name) = ?", "kas").First(&kasAcc)
+
+	expenseAccountName := "BIAYA LAIN LAIN"
+	descUpper := strings.ToUpper(deskripsi + " " + kategori)
+
+	if strings.Contains(descUpper, "LISTRIK") || strings.Contains(descUpper, "PLN") {
+		expenseAccountName = "BIAYA LISTRIK"
+	} else if strings.Contains(descUpper, "GAJI") || strings.Contains(descUpper, "UPAH") {
+		expenseAccountName = "GAJI PEGAWAI"
+	} else if strings.Contains(descUpper, "BBM") || strings.Contains(descUpper, "BAHAN BAKAR") || strings.Contains(descUpper, "BENSIN") {
+		expenseAccountName = "BIAYA BAHAN BAKAR"
+	} else if strings.Contains(descUpper, "KONSUMSI") || strings.Contains(descUpper, "MAKAN") || strings.Contains(descUpper, "MINUM") {
+		expenseAccountName = "BIAYA KONSUMSI"
+	} else if strings.Contains(descUpper, "SAMSAT") || strings.Contains(descUpper, "PAJAK KENDARAAN") {
+		expenseAccountName = "BIAYA SAMSAT KENDARAAN"
+	} else if strings.Contains(descUpper, "EKSPEDISI") || strings.Contains(descUpper, "ONGKIR") || strings.Contains(descUpper, "ANGKUT") {
+		expenseAccountName = "BIAYA EKSPEDISI"
+	} else if strings.Contains(descUpper, "INTERNET") || strings.Contains(descUpper, "WIFI") || strings.Contains(descUpper, "INDIHOME") {
+		expenseAccountName = "BIAYA INTERNET"
+	} else if strings.Contains(descUpper, "TELKOM") || strings.Contains(descUpper, "PULSA") {
+		expenseAccountName = "BIAYA TELKOM"
+	} else if strings.Contains(descUpper, "SAMPAH") || strings.Contains(descUpper, "KEBERSIHAN") {
+		expenseAccountName = "IURAN SAMPAH"
+	} else if strings.Contains(descUpper, "BUNGA") {
+		expenseAccountName = "BIAYA BUNGA"
+	} else if strings.Contains(descUpper, "ADMIN") {
+		expenseAccountName = "BIAYA ADMINISTRASI BANK"
+	} else if strings.Contains(descUpper, "TOKO") || strings.Contains(descUpper, "PLASTIK") || strings.Contains(descUpper, "KERTAS") || strings.Contains(descUpper, "ATK") {
+		expenseAccountName = "BIAYA KEPERLUAN TOKO"
+	}
+
+	var expAcc domain.Account
+	tx.Where("LOWER(name) = ?", strings.ToLower(expenseAccountName)).First(&expAcc)
+	if expAcc.ID == 0 {
+		expAcc = kasAcc
+	}
+
+	entryNumber := fmt.Sprintf("JV-EXP-%s-%d", nota, time.Now().UnixNano()%1000)
+	entry := domain.JournalEntry{
+		EntryNumber: entryNumber,
+		Date:        date,
+		Description: fmt.Sprintf("BIAYA OPERASIONAL: %s", deskripsi),
+		Reference:   nota,
+		Items: []domain.JournalItem{
+			{
+				AccountID:   expAcc.ID,
+				Description: deskripsi,
+				Debet:       total,
+				Kredit:      0,
+			},
+			{
+				AccountID:   kasAcc.ID,
+				Description: "Pengeluaran Kas",
+				Debet:       0,
+				Kredit:      total,
+			},
+		},
+	}
+	_ = tx.Create(&entry).Error
+}
+
+func (s *AccountingService) AutoPostPurchaseJournal(tx *gorm.DB, nota string, total float64, date time.Time) {
+	if tx == nil {
+		tx = s.DB
+	}
+
+	var buyAcc, kasAcc domain.Account
+	tx.Where("LOWER(name) = ?", "pembelian").First(&buyAcc)
+	tx.Where("LOWER(name) = ?", "kas").First(&kasAcc)
+
+	if buyAcc.ID == 0 || kasAcc.ID == 0 {
+		return
+	}
+
+	entryNumber := fmt.Sprintf("JV-BUY-%s-%d", nota, time.Now().UnixNano()%1000)
+	entry := domain.JournalEntry{
+		EntryNumber: entryNumber,
+		Date:        date,
+		Description: fmt.Sprintf("PEMBELIAN STOK BARANG NOTA %s", nota),
+		Reference:   nota,
+		Items: []domain.JournalItem{
+			{
+				AccountID:   buyAcc.ID,
+				Description: "Pembelian Barang Dagang",
+				Debet:       total,
+				Kredit:      0,
+			},
+			{
+				AccountID:   kasAcc.ID,
+				Description: "Kas Pembelian",
+				Debet:       0,
+				Kredit:      total,
+			},
+		},
+	}
+	_ = tx.Create(&entry).Error
 }
