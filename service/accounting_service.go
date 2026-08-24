@@ -471,45 +471,63 @@ func (s *AccountingService) GetGeneralLedger(startDate, endDate string, accountI
 		return nil, err
 	}
 
+	// 1. Batch query Saldo Awal (sebelum startDate) untuk semua akun sekaligus
+	type PrevBalance struct {
+		AccountID  uint    `json:"account_id"`
+		PrevDebet  float64 `json:"prev_debet"`
+		PrevKredit float64 `json:"prev_kredit"`
+	}
+	var prevList []PrevBalance
+	s.DB.Table("journal_items").
+		Select("journal_items.account_id, COALESCE(SUM(journal_items.debet), 0) as prev_debet, COALESCE(SUM(journal_items.kredit), 0) as prev_kredit").
+		Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
+		Where("journal_entries.date < ?", startDate+" 00:00:00").
+		Where("journal_entries.deleted_at IS NULL").
+		Group("journal_items.account_id").
+		Scan(&prevList)
+
+	prevMap := make(map[uint]PrevBalance)
+	for _, p := range prevList {
+		prevMap[p.AccountID] = p
+	}
+
+	// 2. Batch query semua transaksi jurnal pada periode tanggal sekaligus
+	type ItemRow struct {
+		ID          uint      `json:"id"`
+		AccountID   uint      `json:"account_id"`
+		Date        time.Time `json:"date"`
+		EntryNumber string    `json:"entry_number"`
+		Description string    `json:"description"`
+		Reference   string    `json:"reference"`
+		Debet       float64   `json:"debet"`
+		Kredit      float64   `json:"kredit"`
+	}
+	var allRows []ItemRow
+	s.DB.Table("journal_items").
+		Select("journal_items.id, journal_items.account_id, journal_entries.date, journal_entries.entry_number, journal_items.description, journal_entries.reference, journal_items.debet, journal_items.kredit").
+		Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
+		Where("journal_entries.date BETWEEN ? AND ?", startDate+" 00:00:00", endDate+" 23:59:59").
+		Where("journal_entries.deleted_at IS NULL").
+		Order("journal_entries.date asc, journal_entries.id asc").
+		Scan(&allRows)
+
+	rowsMap := make(map[uint][]ItemRow)
+	for _, r := range allRows {
+		rowsMap[r.AccountID] = append(rowsMap[r.AccountID], r)
+	}
+
 	var cards []domain.LedgerAccountCard
 
 	for _, acc := range accounts {
-		var prevDebet, prevKredit float64
-		s.DB.Table("journal_items").
-			Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
-			Where("journal_items.account_id = ?", acc.ID).
-			Where("journal_entries.date < ?", startDate+" 00:00:00").
-			Where("journal_entries.deleted_at IS NULL").
-			Select("COALESCE(SUM(journal_items.debet), 0) as prev_debet, COALESCE(SUM(journal_items.kredit), 0) as prev_kredit").
-			Row().Scan(&prevDebet, &prevKredit)
-
+		prev := prevMap[acc.ID]
 		var initBalance float64
 		if acc.NormalPosition == "DEBET" {
-			initBalance = acc.InitialBalance + prevDebet - prevKredit
+			initBalance = acc.InitialBalance + prev.PrevDebet - prev.PrevKredit
 		} else {
-			initBalance = acc.InitialBalance + prevKredit - prevDebet
+			initBalance = acc.InitialBalance + prev.PrevKredit - prev.PrevDebet
 		}
 
-		type ItemRow struct {
-			ID          uint      `json:"id"`
-			Date        time.Time `json:"date"`
-			EntryNumber string    `json:"entry_number"`
-			Description string    `json:"description"`
-			Reference   string    `json:"reference"`
-			Debet       float64   `json:"debet"`
-			Kredit      float64   `json:"kredit"`
-		}
-
-		var rows []ItemRow
-		s.DB.Table("journal_items").
-			Select("journal_items.id, journal_entries.date, journal_entries.entry_number, journal_items.description, journal_entries.reference, journal_items.debet, journal_items.kredit").
-			Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
-			Where("journal_items.account_id = ?", acc.ID).
-			Where("journal_entries.date BETWEEN ? AND ?", startDate+" 00:00:00", endDate+" 23:59:59").
-			Where("journal_entries.deleted_at IS NULL").
-			Order("journal_entries.date asc, journal_entries.id asc").
-			Scan(&rows)
-
+		rows := rowsMap[acc.ID]
 		var txItems []domain.LedgerTransactionItem
 		currentBal := initBalance
 		var totalDebet, totalKredit float64
