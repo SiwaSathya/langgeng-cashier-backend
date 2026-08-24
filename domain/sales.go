@@ -31,35 +31,97 @@ type Sales struct {
 }
 
 type SalesResponse struct {
-	ID            uint            `json:"id"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
-	DeletedAt     *time.Time      `json:"deleted_at"`
+	ID            uint            `json:"id,omitempty"`
+	CreatedAt     time.Time       `json:"created_at,omitempty"`
+	UpdatedAt     time.Time       `json:"updated_at,omitempty"`
+	DeletedAt     *time.Time      `json:"deleted_at,omitempty"`
 	Invoice       string          `json:"invoice"`
-	ProductID     uint            `json:"product_id"`
-	Product       ProductResponse `gorm:"foreignKey:ProductID"`
-	MemberName    string          `json:"member_name"` // Dari field 'Member' di gambar
-	Qty           float64         `json:"qty"`
-	HBeli         float64         `json:"h_beli"`
-	HJual         float64         `json:"h_jual"`
-	Discount      float64         `json:"discount"`    // Potongan harga
-	TotalNetto    float64         `json:"total_netto"` // Harga setelah diskon
-	PaymentMethod string          `json:"payment_method"`
+	ProductID     uint            `json:"product_id,omitempty"`
+	Product       ProductResponse `gorm:"foreignKey:ProductID" json:"product,omitempty"`
+	MemberName    string          `json:"member_name,omitempty"` // Dari field 'Member' di gambar
+	Qty           float64         `json:"qty,omitempty"`
+	HBeli         float64         `json:"h_beli,omitempty"`
+	HJual         float64         `json:"h_jual,omitempty"`
+	Discount      float64         `json:"discount,omitempty"`    // Potongan harga
+	TotalNetto    float64         `json:"total_netto,omitempty"` // Harga setelah diskon
+	PaymentMethod string          `json:"payment_method,omitempty"`
 	AmountPaid    float64         `json:"amount_paid"`
 	Change        float64         `json:"change"`
+	Status        string          `json:"status,omitempty"`
+	IsDp          bool            `json:"is_dp,omitempty"`
+}
+
+type SalesItemRequest struct {
+	ProductSearch string  `json:"product_search" example:"POLY 32RG9059"`
+	Qty           float64 `json:"qty" example:"1"`
+	Price         float64 `json:"price" example:"20000"`
+	Discount      float64 `json:"discount" example:"0"`
+}
+
+type CreateTransactionRequest struct {
+	Invoice       string             `json:"invoice,omitempty" example:"PJL-123456"`
+	MemberName    string             `json:"member_name" example:"Desak"`
+	UserID        string             `json:"user_id" example:"123"`
+	PaymentMethod string             `json:"payment_method" example:"Bayar Tunai"`
+	AmountPaid    float64            `json:"amount_paid" example:"2500000"`
+	IsDp          bool               `json:"is_dp" example:"false"`
+	Customer      CustomerRequest    `json:"customer"`
+	Items         []SalesItemRequest `json:"items"`
 }
 
 type SalesRequest struct {
-	ProductSearch string   `json:"product_search" example:"POLY 32RG9059"`
-	MemberName    string   `json:"member_name" example:"Desak"`
-	UserID        string   `json:"user_id" example:"123"`
-	Qty           float64  `json:"qty" example:"1"`
-	Price         float64  `json:"price" example:"20000"`
-	Discount      float64  `json:"discount" example:"0"`
-	PaymentMethod string   `json:"payment_method" example:"Bayar Tunai"`
-	AmountPaid    float64  `json:"amount_paid" example:"2500000"`
-	IsDp          bool     `json:"is_dp" example:"false"`
-	Customer      Customer `json:"customer"`
+	ProductSearch string          `json:"product_search" example:"POLY 32RG9059"`
+	MemberName    string          `json:"member_name" example:"Desak"`
+	UserID        string          `json:"user_id" example:"123"`
+	Qty           float64         `json:"qty" example:"1"`
+	Price         float64         `json:"price" example:"20000"`
+	Discount      float64         `json:"discount" example:"0"`
+	PaymentMethod string          `json:"payment_method" example:"Bayar Tunai"`
+	AmountPaid    float64         `json:"amount_paid" example:"2500000"`
+	IsDp          bool            `json:"is_dp" example:"false"`
+	Customer      CustomerRequest `json:"customer"`
+}
+
+type PelunasanRequest struct {
+	PaymentMethod string  `json:"payment_method" example:"Bayar Tunai"`
+	AmountPaid    float64 `json:"amount_paid" example:"500000"`
+	IsDp          bool    `json:"is_dp" example:"false"`
+	Status        string  `json:"status" example:"Lunas"`
+}
+
+type PelunasanResponse struct {
+	ID            uint      `json:"id,omitempty"`
+	Invoice       string    `json:"invoice"`
+	Status        string    `json:"status"`
+	IsDp          bool      `json:"is_dp"`
+	PaymentMethod string    `json:"payment_method"`
+	AmountPaid    float64   `json:"amount_paid"`
+	TotalNetto    float64   `json:"total_netto"`
+	CustomerID    *uint     `json:"customer_id,omitempty"`
+	Customer      Customer  `json:"customer"`
+	Sales         []Sales   `json:"sales"`
+}
+
+// SalesTransactionGroup mengelompokkan item penjualan berdasarkan transaksi / nota (invoice)
+type SalesTransactionGroup struct {
+	Invoice         string    `json:"invoice"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	MemberName      string    `json:"member_name"`
+	UserID          string    `json:"user_id"`
+	User            User      `json:"user"`
+	CustomerID      *uint     `json:"customer_id"`
+	Customer        Customer  `json:"customer"`
+	PaymentMethod   string    `json:"payment_method"`
+	AmountPaid      float64   `json:"amount_paid"`
+	TotalNetto      float64   `json:"total_netto"`
+	Change          float64   `json:"change"`
+	RemainingAmount float64   `json:"remaining_amount"`
+	IsDp            bool      `json:"is_dp"`
+	Status          string    `json:"status"`
+	Shift           *uint     `json:"shift"`
+	TotalQty        float64   `json:"total_qty"`
+	Items           []Sales   `json:"items"`
 }
 
 // Struct untuk filter Sales

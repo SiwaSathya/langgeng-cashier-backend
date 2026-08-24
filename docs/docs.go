@@ -110,27 +110,92 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/receipt": {
+            "get": {
+                "tags": [
+                    "Receipt"
+                ],
+                "summary": "Data Nota Shift",
+                "responses": {}
+            }
+        },
         "/api/sales": {
             "get": {
+                "description": "Mengambil data transaksi penjualan yang dikelompokkan berdasarkan nomor nota (invoice).",
+                "produces": [
+                    "application/json"
+                ],
                 "tags": [
                     "Reports"
                 ],
-                "summary": "Laporan Penjualan (Filter)",
-                "responses": {}
+                "summary": "Laporan Penjualan (Dikelompokkan Per-Nota)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tanggal Mulai (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tanggal Akhir (YYYY-MM-DD)",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter Nama Member",
+                        "name": "member",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter Metode Pembayaran",
+                        "name": "method",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.SalesTransactionGroup"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
             },
             "post": {
+                "description": "Membuat transaksi penjualan per-nota. Untuk transaksi DP, status DP dan customer dicatat per-nota.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
                 "tags": [
                     "Transactions"
                 ],
-                "summary": "Input Penjualan Kasir (Full Detail)",
+                "summary": "Input Penjualan Kasir (Per Nota / Invoice)",
                 "parameters": [
                     {
-                        "description": "Payload Penjualan",
+                        "description": "Payload Penjualan Per-Nota",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/http.SalesRequest"
+                            "$ref": "#/definitions/domain.CreateTransactionRequest"
                         }
                     }
                 ],
@@ -139,6 +204,133 @@ const docTemplate = `{
                         "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/domain.SalesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sales/update-shift": {
+            "put": {
+                "tags": [
+                    "Sales"
+                ],
+                "summary": "Update shift transaksi",
+                "responses": {}
+            }
+        },
+        "/api/sales/user/{user_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Reports"
+                ],
+                "summary": "Laporan Penjualan User (Dikelompokkan Per-Nota)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.SalesTransactionGroup"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/sales/{id}": {
+            "put": {
+                "description": "Melunasi transaksi penjualan berstatus DP untuk satu nota secara utuh.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Transactions"
+                ],
+                "summary": "Pelunasan Transaksi Penjualan (Per-Nota)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sales ID atau Nomor Invoice (e.g. PJL-...)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Payload Pelunasan",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/domain.PelunasanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
@@ -174,7 +366,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/products": {
+        "/produ2cts": {
             "get": {
                 "description": "Mengambil semua data produk dengan pagination dan pencarian nama/kode.",
                 "consumes": [
@@ -225,7 +417,9 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
+            }
+        },
+        "/products": {
             "post": {
                 "consumes": [
                     "application/json"
@@ -416,6 +610,44 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.CreateTransactionRequest": {
+            "type": "object",
+            "properties": {
+                "amount_paid": {
+                    "type": "number",
+                    "example": 2500000
+                },
+                "customer": {
+                    "$ref": "#/definitions/domain.CustomerRequest"
+                },
+                "invoice": {
+                    "type": "string",
+                    "example": "PJL-123456"
+                },
+                "is_dp": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.SalesItemRequest"
+                    }
+                },
+                "member_name": {
+                    "type": "string",
+                    "example": "Desak"
+                },
+                "payment_method": {
+                    "type": "string",
+                    "example": "Bayar Tunai"
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "123"
+                }
+            }
+        },
         "domain.Customer": {
             "type": "object",
             "properties": {
@@ -444,6 +676,106 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.CustomerRequest": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "identity_number": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "phone_number": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.PelunasanRequest": {
+            "type": "object",
+            "properties": {
+                "amount_paid": {
+                    "type": "number",
+                    "example": 500000
+                },
+                "is_dp": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "payment_method": {
+                    "type": "string",
+                    "example": "Bayar Tunai"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "Lunas"
+                }
+            }
+        },
+        "domain.Product": {
+            "type": "object",
+            "properties": {
+                "brand": {
+                    "$ref": "#/definitions/domain.Brand"
+                },
+                "brandID": {
+                    "type": "integer"
+                },
+                "category": {
+                    "$ref": "#/definitions/domain.Category"
+                },
+                "categoryID": {
+                    "type": "integer"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "deletedAt": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "hbeli": {
+                    "type": "number"
+                },
+                "hjual": {
+                    "type": "number"
+                },
+                "hpokok": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "kode": {
+                    "type": "string"
+                },
+                "nama": {
+                    "type": "string"
+                },
+                "saldo": {
+                    "type": "number"
+                },
+                "satuan": {
+                    "type": "string"
+                },
+                "supplier": {
+                    "$ref": "#/definitions/domain.Supplier"
+                },
+                "supplierID": {
+                    "type": "string"
+                },
+                "updatedAt": {
                     "type": "string"
                 }
             }
@@ -560,6 +892,104 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.Sales": {
+            "type": "object",
+            "properties": {
+                "amount_paid": {
+                    "type": "number"
+                },
+                "change": {
+                    "type": "number"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "customer": {
+                    "$ref": "#/definitions/domain.Customer"
+                },
+                "customer_id": {
+                    "type": "integer"
+                },
+                "deletedAt": {
+                    "$ref": "#/definitions/gorm.DeletedAt"
+                },
+                "discount": {
+                    "description": "Potongan harga",
+                    "type": "number"
+                },
+                "h_beli": {
+                    "type": "number"
+                },
+                "h_jual": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "invoice": {
+                    "type": "string"
+                },
+                "is_dp": {
+                    "type": "boolean"
+                },
+                "member_name": {
+                    "description": "Dari field 'Member' di gambar",
+                    "type": "string"
+                },
+                "payment_method": {
+                    "type": "string"
+                },
+                "product": {
+                    "$ref": "#/definitions/domain.Product"
+                },
+                "product_id": {
+                    "type": "integer"
+                },
+                "qty": {
+                    "type": "number"
+                },
+                "shift": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_netto": {
+                    "description": "Harga setelah diskon",
+                    "type": "number"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/domain.User"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.SalesItemRequest": {
+            "type": "object",
+            "properties": {
+                "discount": {
+                    "type": "number",
+                    "example": 0
+                },
+                "price": {
+                    "type": "number",
+                    "example": 20000
+                },
+                "product_search": {
+                    "type": "string",
+                    "example": "POLY 32RG9059"
+                },
+                "qty": {
+                    "type": "number",
+                    "example": 1
+                }
+            }
+        },
         "domain.SalesResponse": {
             "type": "object",
             "properties": {
@@ -591,6 +1021,9 @@ const docTemplate = `{
                 "invoice": {
                     "type": "string"
                 },
+                "is_dp": {
+                    "type": "boolean"
+                },
                 "member_name": {
                     "description": "Dari field 'Member' di gambar",
                     "type": "string"
@@ -607,11 +1040,76 @@ const docTemplate = `{
                 "qty": {
                     "type": "number"
                 },
+                "status": {
+                    "type": "string"
+                },
                 "total_netto": {
                     "description": "Harga setelah diskon",
                     "type": "number"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "domain.SalesTransactionGroup": {
+            "type": "object",
+            "properties": {
+                "amount_paid": {
+                    "type": "number"
+                },
+                "change": {
+                    "type": "number"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "customer": {
+                    "$ref": "#/definitions/domain.Customer"
+                },
+                "customer_id": {
+                    "type": "integer"
+                },
+                "invoice": {
+                    "type": "string"
+                },
+                "is_dp": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.Sales"
+                    }
+                },
+                "member_name": {
+                    "type": "string"
+                },
+                "payment_method": {
+                    "type": "string"
+                },
+                "remaining_amount": {
+                    "type": "number"
+                },
+                "shift": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_netto": {
+                    "type": "number"
+                },
+                "total_qty": {
+                    "type": "number"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/domain.User"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -627,47 +1125,39 @@ const docTemplate = `{
                 }
             }
         },
-        "http.SalesRequest": {
+        "domain.User": {
             "type": "object",
             "properties": {
-                "amount_paid": {
-                    "type": "number",
-                    "example": 2500000
+                "id": {
+                    "type": "string"
                 },
-                "customer": {
-                    "$ref": "#/definitions/domain.Customer"
+                "location": {
+                    "type": "string"
                 },
-                "discount": {
-                    "type": "number",
-                    "example": 0
+                "name": {
+                    "type": "string"
                 },
-                "is_dp": {
-                    "type": "boolean",
-                    "example": false
+                "password": {
+                    "type": "string"
                 },
-                "member_name": {
-                    "type": "string",
-                    "example": "Desak"
+                "role": {
+                    "description": "admin, kasir, super-kasir, akuntan, superadmin",
+                    "type": "string"
                 },
-                "payment_method": {
-                    "type": "string",
-                    "example": "Bayar Tunai"
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "gorm.DeletedAt": {
+            "type": "object",
+            "properties": {
+                "time": {
+                    "type": "string"
                 },
-                "price": {
-                    "type": "number",
-                    "example": 20000
-                },
-                "product_search": {
-                    "type": "string",
-                    "example": "POLY 32RG9059"
-                },
-                "qty": {
-                    "type": "number",
-                    "example": 1
-                },
-                "user_id": {
-                    "type": "integer",
-                    "example": 123
+                "valid": {
+                    "description": "Valid is true if Time is not NULL",
+                    "type": "boolean"
                 }
             }
         }

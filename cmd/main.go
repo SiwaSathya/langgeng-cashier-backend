@@ -245,7 +245,7 @@ func main() {
 
 		importProductJSON(
 			db,
-			"products_combined.json",
+			"POLYTRON.json",
 		)
 
 	default:

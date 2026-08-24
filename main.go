@@ -29,6 +29,9 @@ func main() {
 	expenseService := service.NewExpenseService(db.Postgres.DB)
 	authService := service.NewAuthService(db.Postgres.DB)
 	returService := service.NewReturService(db.Postgres.DB)
+	attendanceService := service.NewAttendanceService(db.Postgres.DB)
+	accountingService := service.NewAccountingService(db.Postgres.DB)
+	analyticsService := service.NewAnalyticsService(db.Postgres.DB)
 
 	trxHandler := http.NewTransactionHandler(trxService)
 	masterHandler := http.NewMasterHandler(masterService)
@@ -37,6 +40,9 @@ func main() {
 	authHandler := http.NewAuthHandler(authService)
 	expenseHandler := http.NewExpenseHandler(expenseService)
 	returHandler := http.NewReturHandler(returService)
+	attendanceHandler := http.NewAttendanceHandler(attendanceService)
+	accountingHandler := http.NewAccountingHandler(accountingService)
+	analyticsHandler := http.NewAnalyticsHandler(analyticsService)
 
 	app := fiber.New(fiber.Config{
 		AppName: "Backend Cashier API",
@@ -77,6 +83,9 @@ func main() {
 	expenseHandler.RegisterRoutes(app)
 	authHandler.RegisterRoutes(app)
 	returHandler.RegisterRoutes(app)
+	attendanceHandler.RegisterRoutes(app)
+	accountingHandler.RegisterRoutes(app)
+	analyticsHandler.RegisterRoutes(app)
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -3,7 +3,8 @@ package http
 import (
 	"backend-cashier/domain"
 	"backend-cashier/service"
-	"fmt"
+	"bytes"
+	"encoding/json"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -49,6 +50,8 @@ func (h *TransactionHandler) RegisterRoutes(app *fiber.App) {
 	api.Post("/expenditure", h.CreateExpenditure)
 	api.Get("/expenditure", h.GetExpenditure)
 	api.Put("/sales/:id", h.PutPelunasanSales)
+	api.Put("/sales/pelunasan/:invoice", h.PutPelunasanSales)
+	api.Put("/sales/invoice/:invoice/pelunasan", h.PutPelunasanSales)
 
 	// --- RUTE SALES RETUR & USER SALES ---
 	api.Get("/sales/user/:user_id", h.GetUserSales)
@@ -62,47 +65,35 @@ func (h *TransactionHandler) RegisterRoutes(app *fiber.App) {
 		"/sales/update/shift",
 		h.UpdateSalesShift,
 	)
-	// api.Get("/sales/:id/is-retur", h.IsRetur)
-	// api.Put("/sales/:id/is-retur", h.IsReturUpdate) // Menggunakan Query Param ?status=true
-	// api.Get("/sales/:id/is-retur-company", h.IsReturToCompany)
-	// api.Put("/sales/:id/is-retur-company", h.IsReturToCompanyUpdate) // Menggunakan Query Param ?status=true
 }
 
 // UpdateSalesShift
 // @Summary Update shift transaksi
 // @Tags Sales
 // @Router /api/sales/update-shift [put]
-
 func (h *TransactionHandler) UpdateSalesShift(
 	c *fiber.Ctx,
 ) error {
-
 	var req domain.UpdateShiftRequest
 
 	if err := c.BodyParser(&req); err != nil {
-
 		return c.Status(
 			400,
 		).JSON(
 			fiber.Map{
-
 				"error": "format request salah",
 			},
 		)
-
 	}
 
 	if req.Shift == 0 {
-
 		return c.Status(
 			400,
 		).JSON(
 			fiber.Map{
-
 				"error": "shift tidak boleh kosong",
 			},
 		)
-
 	}
 
 	err := h.Service.UpdateSalesShift(
@@ -110,102 +101,118 @@ func (h *TransactionHandler) UpdateSalesShift(
 	)
 
 	if err != nil {
-
 		return c.Status(
 			500,
 		).JSON(
 			fiber.Map{
-
 				"error": err.Error(),
 			},
 		)
-
 	}
 
 	return c.JSON(
 		fiber.Map{
-
 			"message": "Shift transaksi berhasil diperbarui",
-
-			"shift": req.Shift,
+			"shift":   req.Shift,
 		},
 	)
-
 }
 
 // GetReceipt mengambil transaksi yang belum mempunyai shift
 // @Summary      Data Nota Shift
 // @Tags         Receipt
 // @Router       /api/receipt [get]
-
 func (h *TransactionHandler) GetReceipt(
 	c *fiber.Ctx,
 ) error {
-
 	results, err := h.Service.GetReceipt()
 
 	if err != nil {
-
 		return c.Status(500).JSON(
 			fiber.Map{
-
 				"error": err.Error(),
 			},
 		)
-
 	}
 
 	return c.JSON(
 		domain.ReceiptResponse{
-
 			Category: results.Category,
-
-			Sales: results.Sales,
-
+			Sales:    results.Sales,
 			Expenses: results.Expenses,
 		},
 	)
-
 }
 
-// @Summary      Input Penjualan Kasir (Full Detail)
+// CreateSales godoc
+// @Summary      Input Penjualan Kasir (Per Nota / Invoice)
+// @Description  Membuat transaksi penjualan per-nota. Untuk transaksi DP, status DP dan customer dicatat per-nota.
 // @Tags         Transactions
-// @Param        request body http.SalesRequest true "Payload Penjualan"
+// @Accept       json
+// @Produce      json
+// @Param        request body domain.CreateTransactionRequest true "Payload Penjualan Per-Nota"
 // @Success      201  {object}  domain.SalesResponse
+// @Failure      400  {object}  map[string]string
 // @Router       /api/sales [post]
 func (h *TransactionHandler) CreateSales(c *fiber.Ctx) error {
-	var req []SalesRequest
+	var txReq domain.CreateTransactionRequest
 
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Format data salah"})
+	rawBody := c.Body()
+	trimmed := bytes.TrimSpace(rawBody)
+
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		// Format legacy array []SalesRequest
+		var items []domain.SalesRequest
+		if err := json.Unmarshal(trimmed, &items); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Format data array tidak valid: " + err.Error()})
+		}
+		if len(items) == 0 {
+			return c.Status(400).JSON(fiber.Map{"error": "Data transaksi kosong"})
+		}
+
+		// Header transaksi diambil dari elemen pertama
+		txReq.MemberName = items[0].MemberName
+		txReq.UserID = items[0].UserID
+		txReq.PaymentMethod = items[0].PaymentMethod
+		txReq.AmountPaid = items[0].AmountPaid
+		txReq.IsDp = items[0].IsDp
+		txReq.Customer = items[0].Customer
+
+		for _, it := range items {
+			txReq.Items = append(txReq.Items, domain.SalesItemRequest{
+				ProductSearch: it.ProductSearch,
+				Qty:           it.Qty,
+				Price:         it.Price,
+				Discount:      it.Discount,
+			})
+		}
+	} else {
+		// Format JSON object CreateTransactionRequest
+		if err := json.Unmarshal(trimmed, &txReq); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Format data JSON tidak valid: " + err.Error()})
+		}
+
+		// Jika dikirim sebagai single SalesRequest object tanpa `items`
+		if len(txReq.Items) == 0 {
+			var single domain.SalesRequest
+			if err := json.Unmarshal(trimmed, &single); err == nil && single.ProductSearch != "" {
+				txReq.MemberName = single.MemberName
+				txReq.UserID = single.UserID
+				txReq.PaymentMethod = single.PaymentMethod
+				txReq.AmountPaid = single.AmountPaid
+				txReq.IsDp = single.IsDp
+				txReq.Customer = single.Customer
+				txReq.Items = append(txReq.Items, domain.SalesItemRequest{
+					ProductSearch: single.ProductSearch,
+					Qty:           single.Qty,
+					Price:         single.Price,
+					Discount:      single.Discount,
+				})
+			}
+		}
 	}
 
-	fmt.Println("Request sebelum mapping:", req)
-
-	var salesRequests []domain.SalesRequest
-	for _, item := range req {
-		salesRequests = append(salesRequests, domain.SalesRequest{
-			ProductSearch: item.ProductSearch,
-			MemberName:    item.MemberName,
-			Qty:           item.Qty,
-			Price:         item.Price,
-			Discount:      item.Discount,
-			PaymentMethod: item.PaymentMethod,
-			AmountPaid:    item.AmountPaid,
-			IsDp:          item.IsDp,
-			UserID:        item.UserID,
-			Customer: domain.Customer{
-				Name:           item.Customer.Name,
-				Age:            item.Customer.Age,
-				Address:        item.Customer.Address,
-				PhoneNumber:    item.Customer.PhoneNumber,
-				IdentityNumber: item.Customer.IdentityNumber,
-			},
-		})
-	}
-
-	fmt.Println("Request setelah mapping ke domain.SalesRequest:", salesRequests)
-	result, err := h.Service.CreateSales(salesRequests)
+	result, err := h.Service.CreateSales(txReq)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -214,8 +221,16 @@ func (h *TransactionHandler) CreateSales(c *fiber.Ctx) error {
 }
 
 // GetSales godoc
-// @Summary      Laporan Penjualan (Filter)
+// @Summary      Laporan Penjualan (Dikelompokkan Per-Nota)
+// @Description  Mengambil data transaksi penjualan yang dikelompokkan berdasarkan nomor nota (invoice).
 // @Tags         Reports
+// @Produce      json
+// @Param        start_date query     string false "Tanggal Mulai (YYYY-MM-DD)"
+// @Param        end_date   query     string false "Tanggal Akhir (YYYY-MM-DD)"
+// @Param        member     query     string false "Filter Nama Member"
+// @Param        method     query     string false "Filter Metode Pembayaran"
+// @Success      200        {array}   domain.SalesTransactionGroup
+// @Failure      500        {object}  map[string]string
 // @Router       /api/sales [get]
 func (h *TransactionHandler) GetSales(c *fiber.Ctx) error {
 	start := c.Query("start_date")
@@ -275,7 +290,15 @@ func (h *TransactionHandler) GetExpenditure(c *fiber.Ctx) error {
 	return c.JSON(results)
 }
 
-// GetUserSales mengambil data penjualan berdasarkan ID User
+// GetUserSales godoc
+// @Summary      Laporan Penjualan User (Dikelompokkan Per-Nota)
+// @Tags         Reports
+// @Produce      json
+// @Param        user_id path      int    true "User ID"
+// @Success      200     {array}   domain.SalesTransactionGroup
+// @Failure      400     {object}  map[string]string
+// @Failure      500     {object}  map[string]string
+// @Router       /api/sales/user/{user_id} [get]
 func (h *TransactionHandler) GetUserSales(c *fiber.Ctx) error {
 	userIdStr := c.Params("user_id")
 	userId, err := strconv.ParseUint(userIdStr, 10, 32)
@@ -291,40 +314,49 @@ func (h *TransactionHandler) GetUserSales(c *fiber.Ctx) error {
 	return c.JSON(results)
 }
 
+// PutPelunasanSales godoc
+// @Summary      Pelunasan Transaksi Penjualan (Per-Nota)
+// @Description  Melunasi transaksi penjualan berstatus DP untuk satu nota secara utuh.
+// @Tags         Transactions
+// @Accept       json
+// @Produce      json
+// @Param        id       path      string                  true  "Sales ID atau Nomor Invoice (e.g. PJL-...)"
+// @Param        request  body      domain.PelunasanRequest true  "Payload Pelunasan"
+// @Success      200      {object}  map[string]interface{}
+// @Failure      400      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/sales/{id} [put]
 func (h *TransactionHandler) PutPelunasanSales(c *fiber.Ctx) error {
-	// 1. Ambil ID dari parameter URL (/api/sales/19 -> ID = 19)
-	idParam := c.Params("id")
-	id, err := strconv.Atoi(idParam)
-	if err != nil {
+	identifier := c.Params("id")
+	if identifier == "" {
+		identifier = c.Params("invoice")
+	}
+	if identifier == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "ID transaksi tidak valid",
+			"error": "ID atau Nomor Invoice transaksi tidak boleh kosong",
 		})
 	}
 
-	// 2. Parse JSON body yang dikirim oleh SweetAlert / Frontend
-	var req service.PelunasanRequest
+	var req domain.PelunasanRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Format data request pelunasan tidak valid: " + err.Error(),
 		})
 	}
 
-	// Auto-fallback jika status dari frontend tidak terisi
 	if req.Status == "" {
 		req.Status = "Lunas"
 	}
 
-	// 3. Panggil fungsi PelunasanSales yang sudah kita buat di TransactionService
-	result, err := h.Service.PelunasanSales(uint(id), req)
+	result, err := h.Service.PelunasanSales(identifier, req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
 
-	// 4. Kembalikan response sukses 200 OK ke frontend riwayat.html
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": "Pelunasan transaksi berhasil disimpan!",
+		"message": "Pelunasan transaksi nota berhasil disimpan!",
 		"data":    result,
 	})
 }
@@ -332,15 +364,11 @@ func (h *TransactionHandler) PutPelunasanSales(c *fiber.Ctx) error {
 func (h *TransactionHandler) GetCurrentShift(
 	c *fiber.Ctx,
 ) error {
-
-	shift :=
-		h.Service.GetCurrentShift()
+	shift := h.Service.GetCurrentShift()
 
 	return c.JSON(
 		fiber.Map{
-
 			"shift": shift,
 		},
 	)
-
 }

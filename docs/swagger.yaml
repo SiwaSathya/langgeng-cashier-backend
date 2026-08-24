@@ -14,6 +14,33 @@ definitions:
       name:
         type: string
     type: object
+  domain.CreateTransactionRequest:
+    properties:
+      amount_paid:
+        example: 2500000
+        type: number
+      customer:
+        $ref: '#/definitions/domain.CustomerRequest'
+      invoice:
+        example: PJL-123456
+        type: string
+      is_dp:
+        example: false
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/domain.SalesItemRequest'
+        type: array
+      member_name:
+        example: Desak
+        type: string
+      payment_method:
+        example: Bayar Tunai
+        type: string
+      user_id:
+        example: "123"
+        type: string
+    type: object
   domain.Customer:
     properties:
       address:
@@ -33,6 +60,73 @@ definitions:
       phone_number:
         type: string
       updated_at:
+        type: string
+    type: object
+  domain.CustomerRequest:
+    properties:
+      address:
+        type: string
+      age:
+        type: integer
+      id:
+        type: integer
+      identity_number:
+        type: string
+      name:
+        type: string
+      phone_number:
+        type: string
+    type: object
+  domain.PelunasanRequest:
+    properties:
+      amount_paid:
+        example: 500000
+        type: number
+      is_dp:
+        example: false
+        type: boolean
+      payment_method:
+        example: Bayar Tunai
+        type: string
+      status:
+        example: Lunas
+        type: string
+    type: object
+  domain.Product:
+    properties:
+      brand:
+        $ref: '#/definitions/domain.Brand'
+      brandID:
+        type: integer
+      category:
+        $ref: '#/definitions/domain.Category'
+      categoryID:
+        type: integer
+      createdAt:
+        type: string
+      deletedAt:
+        $ref: '#/definitions/gorm.DeletedAt'
+      hbeli:
+        type: number
+      hjual:
+        type: number
+      hpokok:
+        type: number
+      id:
+        type: integer
+      kode:
+        type: string
+      nama:
+        type: string
+      saldo:
+        type: number
+      satuan:
+        type: string
+      supplier:
+        $ref: '#/definitions/domain.Supplier'
+      supplierID:
+        type: string
+      updatedAt:
         type: string
     type: object
   domain.ProductRequest:
@@ -109,6 +203,73 @@ definitions:
       updated_at:
         type: string
     type: object
+  domain.Sales:
+    properties:
+      amount_paid:
+        type: number
+      change:
+        type: number
+      createdAt:
+        type: string
+      customer:
+        $ref: '#/definitions/domain.Customer'
+      customer_id:
+        type: integer
+      deletedAt:
+        $ref: '#/definitions/gorm.DeletedAt'
+      discount:
+        description: Potongan harga
+        type: number
+      h_beli:
+        type: number
+      h_jual:
+        type: number
+      id:
+        type: integer
+      invoice:
+        type: string
+      is_dp:
+        type: boolean
+      member_name:
+        description: Dari field 'Member' di gambar
+        type: string
+      payment_method:
+        type: string
+      product:
+        $ref: '#/definitions/domain.Product'
+      product_id:
+        type: integer
+      qty:
+        type: number
+      shift:
+        type: integer
+      status:
+        type: string
+      total_netto:
+        description: Harga setelah diskon
+        type: number
+      updatedAt:
+        type: string
+      user:
+        $ref: '#/definitions/domain.User'
+      user_id:
+        type: string
+    type: object
+  domain.SalesItemRequest:
+    properties:
+      discount:
+        example: 0
+        type: number
+      price:
+        example: 20000
+        type: number
+      product_search:
+        example: POLY 32RG9059
+        type: string
+      qty:
+        example: 1
+        type: number
+    type: object
   domain.SalesResponse:
     properties:
       amount_paid:
@@ -130,6 +291,8 @@ definitions:
         type: integer
       invoice:
         type: string
+      is_dp:
+        type: boolean
       member_name:
         description: Dari field 'Member' di gambar
         type: string
@@ -141,10 +304,53 @@ definitions:
         type: integer
       qty:
         type: number
+      status:
+        type: string
       total_netto:
         description: Harga setelah diskon
         type: number
       updated_at:
+        type: string
+    type: object
+  domain.SalesTransactionGroup:
+    properties:
+      amount_paid:
+        type: number
+      change:
+        type: number
+      created_at:
+        type: string
+      customer:
+        $ref: '#/definitions/domain.Customer'
+      customer_id:
+        type: integer
+      invoice:
+        type: string
+      is_dp:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/domain.Sales'
+        type: array
+      member_name:
+        type: string
+      payment_method:
+        type: string
+      remaining_amount:
+        type: number
+      shift:
+        type: integer
+      status:
+        type: string
+      total_netto:
+        type: number
+      total_qty:
+        type: number
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/domain.User'
+      user_id:
         type: string
     type: object
   domain.Supplier:
@@ -154,37 +360,29 @@ definitions:
       name:
         type: string
     type: object
-  http.SalesRequest:
+  domain.User:
     properties:
-      amount_paid:
-        example: 2500000
-        type: number
-      customer:
-        $ref: '#/definitions/domain.Customer'
-      discount:
-        example: 0
-        type: number
-      is_dp:
-        example: false
+      id:
+        type: string
+      location:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+      role:
+        description: admin, kasir, super-kasir, akuntan, superadmin
+        type: string
+      username:
+        type: string
+    type: object
+  gorm.DeletedAt:
+    properties:
+      time:
+        type: string
+      valid:
+        description: Valid is true if Time is not NULL
         type: boolean
-      member_name:
-        example: Desak
-        type: string
-      payment_method:
-        example: Bayar Tunai
-        type: string
-      price:
-        example: 20000
-        type: number
-      product_search:
-        example: POLY 32RG9059
-        type: string
-      qty:
-        example: 1
-        type: number
-      user_id:
-        example: 123
-        type: integer
     type: object
 host: localhost:4000
 info:
@@ -256,28 +454,158 @@ paths:
       summary: Get Daftar Produk
       tags:
       - Master Data
-  /api/sales:
+  /api/receipt:
     get:
       responses: {}
-      summary: Laporan Penjualan (Filter)
+      summary: Data Nota Shift
+      tags:
+      - Receipt
+  /api/sales:
+    get:
+      description: Mengambil data transaksi penjualan yang dikelompokkan berdasarkan
+        nomor nota (invoice).
+      parameters:
+      - description: Tanggal Mulai (YYYY-MM-DD)
+        in: query
+        name: start_date
+        type: string
+      - description: Tanggal Akhir (YYYY-MM-DD)
+        in: query
+        name: end_date
+        type: string
+      - description: Filter Nama Member
+        in: query
+        name: member
+        type: string
+      - description: Filter Metode Pembayaran
+        in: query
+        name: method
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.SalesTransactionGroup'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Laporan Penjualan (Dikelompokkan Per-Nota)
       tags:
       - Reports
     post:
+      consumes:
+      - application/json
+      description: Membuat transaksi penjualan per-nota. Untuk transaksi DP, status
+        DP dan customer dicatat per-nota.
       parameters:
-      - description: Payload Penjualan
+      - description: Payload Penjualan Per-Nota
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/http.SalesRequest'
+          $ref: '#/definitions/domain.CreateTransactionRequest'
+      produces:
+      - application/json
       responses:
         "201":
           description: Created
           schema:
             $ref: '#/definitions/domain.SalesResponse'
-      summary: Input Penjualan Kasir (Full Detail)
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Input Penjualan Kasir (Per Nota / Invoice)
       tags:
       - Transactions
+  /api/sales/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Melunasi transaksi penjualan berstatus DP untuk satu nota secara
+        utuh.
+      parameters:
+      - description: Sales ID atau Nomor Invoice (e.g. PJL-...)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Payload Pelunasan
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/domain.PelunasanRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Pelunasan Transaksi Penjualan (Per-Nota)
+      tags:
+      - Transactions
+  /api/sales/update-shift:
+    put:
+      responses: {}
+      summary: Update shift transaksi
+      tags:
+      - Sales
+  /api/sales/user/{user_id}:
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.SalesTransactionGroup'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Laporan Penjualan User (Dikelompokkan Per-Nota)
+      tags:
+      - Reports
   /master/resources:
     get:
       description: Mengambil daftar Category, Brand, dan Supplier untuk pilihan input
@@ -299,7 +627,7 @@ paths:
       summary: Get Dropdown Resources
       tags:
       - Master Data
-  /products:
+  /produ2cts:
     get:
       consumes:
       - application/json
@@ -334,6 +662,7 @@ paths:
       summary: Get All Products
       tags:
       - Products
+  /products:
     post:
       consumes:
       - application/json
