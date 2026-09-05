@@ -4,6 +4,7 @@ import (
 	"backend-cashier/domain"
 	"backend-cashier/service"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -41,7 +42,7 @@ func (h *ProductHandler) FetchProducts(c *fiber.Ctx) error {
 	search := c.Query("search")
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
-	data, total, err := h.Service.GetAll(search, page, limit)
+	data, total, err := h.Service.GetAll(strings.ToUpper(search), page, limit)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"message": err.Error()})
 	}
