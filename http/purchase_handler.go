@@ -3,6 +3,7 @@ package http
 import (
 	"backend-cashier/domain"
 	"backend-cashier/service"
+	"fmt"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -26,7 +27,7 @@ func (h *PurchaseHandler) RegisterRoutes(app *fiber.App) {
 }
 
 func (h *PurchaseHandler) Create(c *fiber.Ctx) error {
-	purchase := new(domain.Purchase)
+	purchase := new(domain.PurchaseRequest)
 	if err := c.BodyParser(purchase); err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"status":  "error",
@@ -34,13 +35,27 @@ func (h *PurchaseHandler) Create(c *fiber.Ctx) error {
 		})
 	}
 
+	payload := domain.Purchase{
+		Nota:       purchase.Nota,
+		Tanggal:    purchase.Tanggal,
+		ProductID:  purchase.ProductID,
+		SupplierID: purchase.SupplierID,
+		Qty:        purchase.Qty,
+		HBeli:      purchase.HBeli,
+		Total:      purchase.Total,
+		UserID:     purchase.UserID,
+		Location:   purchase.Location,
+	}
+
 	// Pastikan service menerima pointer ke domain.Purchase
-	if err := h.Service.CreatePurchase(purchase); err != nil {
+	if err := h.Service.CreatePurchase(&payload); err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"status":  "error",
 			"message": err.Error(),
 		})
 	}
+
+	fmt.Printf("PURCHASE REQUEST : %+v\n", purchase)
 
 	return c.Status(201).JSON(fiber.Map{
 		"status":  "success",

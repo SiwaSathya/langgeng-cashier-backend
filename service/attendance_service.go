@@ -7,47 +7,205 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	// Embed database timezone ke binary Go.
+	// Ini penting agar Asia/Makassar tetap tersedia di Railway/container.
+	_ "time/tzdata"
 )
 
 type AttendanceService struct {
 	DB *gorm.DB
 }
 
+// ======================================================
+// TIMEZONE
+// ======================================================
+
+// Bali menggunakan WITA / UTC+8.
+var baliLocation = func() *time.Location {
+	loc, err := time.LoadLocation("Asia/Makassar")
+	if err != nil {
+		return time.FixedZone("WITA", 8*60*60)
+	}
+	return loc
+}()
+
 func NewAttendanceService(db *gorm.DB) *AttendanceService {
-	return &AttendanceService{DB: db}
+	return &AttendanceService{
+		DB: db,
+	}
 }
 
-func (s *AttendanceService) CreateAttendance(req domain.AttendanceRequest) (*domain.Attendance, error) {
-	if req.UserID == "" {
-		return nil, errors.New("user ID / karyawan wajib dipilih")
+// ======================================================
+// HELPER: PARSE TANGGAL
+// ======================================================
+
+func parseAttendanceDate(value string) time.Time {
+	value = strings.TrimSpace(value)
+
+	if value == "" {
+		now := time.Now()
+		return time.Date(
+			now.Year(),
+			now.Month(),
+			now.Day(),
+			0, 0, 0, 0,
+			baliLocation,
+		)
+	}
+
+	// yyyy-mm-dd
+	if parsed, err := time.Parse("2006-01-02", value); err == nil {
+		return time.Date(
+			parsed.Year(),
+			parsed.Month(),
+			parsed.Day(),
+			0, 0, 0, 0,
+			baliLocation,
+		)
+	}
+
+	// RFC3339
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		// JANGAN .In(baliLocation)
+		// Ambil tanggalnya secara literal
+		return time.Date(
+			parsed.Year(),
+			parsed.Month(),
+			parsed.Day(),
+			0, 0, 0, 0,
+			baliLocation,
+		)
+	}
+
+	return time.Now()
+}
+
+// ======================================================
+// HELPER: PARSE JAM
+// ======================================================
+
+func parseAttendanceTime(
+	date time.Time,
+	value string,
+) *time.Time {
+
+	value = strings.TrimSpace(value)
+
+	if value == "" {
+		return nil
+	}
+
+	// Input normal HH:mm
+	if parsed, err := time.Parse("15:04", value); err == nil {
+
+		fullTime := time.Date(
+			date.Year(),
+			date.Month(),
+			date.Day(),
+			parsed.Hour(),
+			parsed.Minute(),
+			0,
+			0,
+			baliLocation,
+		)
+
+		return &fullTime
+	}
+
+	// Jika frontend mengirim RFC3339
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+
+		// PENTING:
+		// Jangan gunakan parsed.In(baliLocation)
+		//
+		// Kita hanya ambil nilai jam yang dikirim secara literal.
+		fullTime := time.Date(
+			date.Year(),
+			date.Month(),
+			date.Day(),
+			parsed.Hour(),
+			parsed.Minute(),
+			parsed.Second(),
+			0,
+			baliLocation,
+		)
+
+		return &fullTime
+	}
+
+	return nil
+}
+
+// ======================================================
+// CREATE ATTENDANCE
+// ======================================================
+
+func (s *AttendanceService) CreateAttendance(
+	req domain.AttendanceRequest,
+) (*domain.Attendance, error) {
+
+	// --------------------------------------------------
+	// Validasi User
+	// --------------------------------------------------
+
+	if strings.TrimSpace(req.UserID) == "" {
+		return nil, errors.New(
+			"user ID / karyawan wajib dipilih",
+		)
 	}
 
 	var user domain.User
-	if err := s.DB.First(&user, "id = ?", req.UserID).Error; err != nil {
-		return nil, errors.New("data karyawan tidak ditemukan")
+
+	if err := s.DB.
+		First(
+			&user,
+			"id = ?",
+			req.UserID,
+		).
+		Error; err != nil {
+
+		return nil, errors.New(
+			"data karyawan tidak ditemukan",
+		)
 	}
 
-	var attDate time.Time
-	var err error
-	if req.Date != "" {
-		attDate, err = time.Parse("2006-01-02", req.Date)
-		if err != nil {
-			attDate, err = time.Parse(time.RFC3339, req.Date)
-			if err != nil {
-				attDate = time.Now()
-			}
-		}
-	} else {
-		attDate = time.Now()
-	}
+	// --------------------------------------------------
+	// Tanggal Absensi
+	// --------------------------------------------------
 
-	status := req.Status
+	attDate := parseAttendanceDate(req.Date)
+
+	// Normalisasi tanggal ke timezone WITA.
+	attDate = time.Date(
+		attDate.Year(),
+		attDate.Month(),
+		attDate.Day(),
+		0,
+		0,
+		0,
+		0,
+		baliLocation,
+	)
+
+	// --------------------------------------------------
+	// Status
+	// --------------------------------------------------
+
+	status := strings.TrimSpace(req.Status)
+
 	if status == "" {
 		status = "Pagi"
 	}
 
+	// --------------------------------------------------
+	// Shift
+	// --------------------------------------------------
+
 	shift := req.Shift
+
 	if shift == 0 {
+
 		if strings.EqualFold(status, "Siang") {
 			shift = 2
 		} else {
@@ -55,37 +213,40 @@ func (s *AttendanceService) CreateAttendance(req domain.AttendanceRequest) (*dom
 		}
 	}
 
-	var checkInTime *time.Time
-	if req.CheckIn != "" {
-		t, err := time.Parse("15:04", req.CheckIn)
-		if err == nil {
-			fullTime := time.Date(attDate.Year(), attDate.Month(), attDate.Day(), t.Hour(), t.Minute(), 0, 0, time.Local)
-			checkInTime = &fullTime
-		} else {
-			t2, err2 := time.Parse(time.RFC3339, req.CheckIn)
-			if err2 == nil {
-				checkInTime = &t2
-			}
-		}
-	}
-	if checkInTime == nil && (status == "Pagi" || status == "Siang" || status == "Lembur" || status == "Bantu" || status == "Hadir") {
-		now := time.Now()
+	// --------------------------------------------------
+	// Check In
+	// --------------------------------------------------
+
+	checkInTime := parseAttendanceTime(
+		attDate,
+		req.CheckIn,
+	)
+
+	// Jika status hadir tetapi jam tidak dikirim,
+	// gunakan jam sekarang dalam timezone WITA.
+	if checkInTime == nil &&
+		(strings.EqualFold(status, "Pagi") ||
+			strings.EqualFold(status, "Siang") ||
+			strings.EqualFold(status, "Lembur") ||
+			strings.EqualFold(status, "Bantu") ||
+			strings.EqualFold(status, "Hadir")) {
+
+		now := time.Now().In(baliLocation)
 		checkInTime = &now
 	}
 
-	var checkOutTime *time.Time
-	if req.CheckOut != "" {
-		t, err := time.Parse("15:04", req.CheckOut)
-		if err == nil {
-			fullTime := time.Date(attDate.Year(), attDate.Month(), attDate.Day(), t.Hour(), t.Minute(), 0, 0, time.Local)
-			checkOutTime = &fullTime
-		} else {
-			t2, err2 := time.Parse(time.RFC3339, req.CheckOut)
-			if err2 == nil {
-				checkOutTime = &t2
-			}
-		}
-	}
+	// --------------------------------------------------
+	// Check Out
+	// --------------------------------------------------
+
+	checkOutTime := parseAttendanceTime(
+		attDate,
+		req.CheckOut,
+	)
+
+	// --------------------------------------------------
+	// Object Attendance
+	// --------------------------------------------------
 
 	attendance := domain.Attendance{
 		UserID:   user.ID,
@@ -97,138 +258,591 @@ func (s *AttendanceService) CreateAttendance(req domain.AttendanceRequest) (*dom
 		Notes:    req.Notes,
 	}
 
-	if err := s.DB.Create(&attendance).Error; err != nil {
+	// --------------------------------------------------
+	// Insert DB
+	// --------------------------------------------------
+
+	if err := s.DB.
+		Create(&attendance).
+		Error; err != nil {
+
 		return nil, err
 	}
 
-	s.DB.Preload("User").First(&attendance, attendance.ID)
+	// --------------------------------------------------
+	// Preload User
+	// --------------------------------------------------
+
+	if err := s.DB.
+		Preload("User").
+		First(
+			&attendance,
+			attendance.ID,
+		).
+		Error; err != nil {
+
+		return nil, err
+	}
+
 	return &attendance, nil
 }
 
-func (s *AttendanceService) GetAllAttendance(f domain.AttendanceFilter) ([]domain.Attendance, int64, error) {
+// ======================================================
+// GET ALL ATTENDANCE
+// ======================================================
+
+func (s *AttendanceService) GetAllAttendance(
+	f domain.AttendanceFilter,
+) ([]domain.Attendance, int64, error) {
+
 	var records []domain.Attendance
 	var total int64
 
-	query := s.DB.Model(&domain.Attendance{}).Preload("User")
+	query := s.DB.
+		Model(&domain.Attendance{}).
+		Preload("User")
 
-	if f.Date != "" {
-		query = query.Where("DATE(date) = ?", f.Date)
+	// --------------------------------------------------
+	// Filter tanggal tertentu
+	// --------------------------------------------------
+
+	if strings.TrimSpace(f.Date) != "" {
+
+		date, err := time.ParseInLocation(
+			"2006-01-02",
+			f.Date,
+			baliLocation,
+		)
+
+		if err == nil {
+
+			start := time.Date(
+				date.Year(),
+				date.Month(),
+				date.Day(),
+				0,
+				0,
+				0,
+				0,
+				baliLocation,
+			)
+
+			end := start.Add(24 * time.Hour)
+
+			query = query.Where(
+				"date >= ? AND date < ?",
+				start,
+				end,
+			)
+		}
 	}
-	if f.StartDate != "" && f.EndDate != "" {
-		query = query.Where("date BETWEEN ? AND ?", f.StartDate+" 00:00:00", f.EndDate+" 23:59:59")
+
+	// --------------------------------------------------
+	// Filter range tanggal
+	// --------------------------------------------------
+
+	if strings.TrimSpace(f.StartDate) != "" &&
+		strings.TrimSpace(f.EndDate) != "" {
+
+		startDate, startErr := time.ParseInLocation(
+			"2006-01-02",
+			f.StartDate,
+			baliLocation,
+		)
+
+		endDate, endErr := time.ParseInLocation(
+			"2006-01-02",
+			f.EndDate,
+			baliLocation,
+		)
+
+		if startErr == nil && endErr == nil {
+
+			start := time.Date(
+				startDate.Year(),
+				startDate.Month(),
+				startDate.Day(),
+				0,
+				0,
+				0,
+				0,
+				baliLocation,
+			)
+
+			end := time.Date(
+				endDate.Year(),
+				endDate.Month(),
+				endDate.Day(),
+				0,
+				0,
+				0,
+				0,
+				baliLocation,
+			).Add(24 * time.Hour)
+
+			query = query.Where(
+				"date >= ? AND date < ?",
+				start,
+				end,
+			)
+		}
 	}
-	if f.UserID != "" {
-		query = query.Where("user_id = ?", f.UserID)
+
+	// --------------------------------------------------
+	// User
+	// --------------------------------------------------
+
+	if strings.TrimSpace(f.UserID) != "" {
+		query = query.Where(
+			"user_id = ?",
+			f.UserID,
+		)
 	}
+
+	// --------------------------------------------------
+	// Shift
+	// --------------------------------------------------
+
 	if f.Shift > 0 {
-		query = query.Where("shift = ?", f.Shift)
-	}
-	if f.Status != "" {
-		query = query.Where("LOWER(status) = ?", strings.ToLower(f.Status))
-	}
-	if f.Search != "" {
-		searchPattern := "%" + strings.ToLower(f.Search) + "%"
-		query = query.Joins("LEFT JOIN users ON users.id = attendances.user_id").
-			Where("LOWER(users.name) LIKE ? OR LOWER(attendances.notes) LIKE ?", searchPattern, searchPattern)
+		query = query.Where(
+			"shift = ?",
+			f.Shift,
+		)
 	}
 
-	if err := query.Count(&total).Error; err != nil {
+	// --------------------------------------------------
+	// Status
+	// --------------------------------------------------
+
+	if strings.TrimSpace(f.Status) != "" {
+		query = query.Where(
+			"LOWER(status) = ?",
+			strings.ToLower(f.Status),
+		)
+	}
+
+	// --------------------------------------------------
+	// Search
+	// --------------------------------------------------
+
+	if strings.TrimSpace(f.Search) != "" {
+
+		searchPattern :=
+			"%" +
+				strings.ToLower(
+					strings.TrimSpace(f.Search),
+				) +
+				"%"
+
+		query = query.
+			Joins(
+				"LEFT JOIN users ON users.id = attendances.user_id",
+			).
+			Where(
+				`LOWER(users.name) LIKE ?
+				OR LOWER(attendances.notes) LIKE ?`,
+				searchPattern,
+				searchPattern,
+			)
+	}
+
+	// --------------------------------------------------
+	// Count
+	// --------------------------------------------------
+
+	if err := query.
+		Count(&total).
+		Error; err != nil {
+
 		return nil, 0, err
 	}
 
+	// --------------------------------------------------
+	// Pagination
+	// --------------------------------------------------
+
 	page := f.Page
+
 	if page < 1 {
 		page = 1
 	}
+
 	limit := f.Limit
+
 	if limit < 1 {
 		limit = 10
 	}
+
 	offset := (page - 1) * limit
 
-	err := query.Order("date desc, id desc").Limit(limit).Offset(offset).Find(&records).Error
+	// --------------------------------------------------
+	// Find
+	// --------------------------------------------------
+
+	err := query.
+		Order("date DESC, id DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&records).
+		Error
+
 	return records, total, err
 }
 
-func (s *AttendanceService) GetAttendanceByID(id uint) (*domain.Attendance, error) {
+// ======================================================
+// GET ATTENDANCE BY ID
+// ======================================================
+
+func (s *AttendanceService) GetAttendanceByID(
+	id uint,
+) (*domain.Attendance, error) {
+
 	var record domain.Attendance
-	if err := s.DB.Preload("User").First(&record, id).Error; err != nil {
-		return nil, errors.New("data absensi tidak ditemukan")
+
+	if err := s.DB.
+		Preload("User").
+		First(
+			&record,
+			id,
+		).
+		Error; err != nil {
+
+		return nil, errors.New(
+			"data absensi tidak ditemukan",
+		)
 	}
+
 	return &record, nil
 }
 
-func (s *AttendanceService) UpdateAttendance(id uint, req domain.AttendanceRequest) (*domain.Attendance, error) {
+// ======================================================
+// UPDATE ATTENDANCE
+// ======================================================
+
+func (s *AttendanceService) UpdateAttendance(
+	id uint,
+	req domain.AttendanceRequest,
+) (*domain.Attendance, error) {
+
 	var record domain.Attendance
-	if err := s.DB.First(&record, id).Error; err != nil {
-		return nil, errors.New("data absensi tidak ditemukan")
+
+	if err := s.DB.
+		First(
+			&record,
+			id,
+		).
+		Error; err != nil {
+
+		return nil, errors.New(
+			"data absensi tidak ditemukan",
+		)
 	}
 
 	updates := map[string]interface{}{}
-	if req.UserID != "" {
+
+	// --------------------------------------------------
+	// User
+	// --------------------------------------------------
+
+	if strings.TrimSpace(req.UserID) != "" {
+
+		var user domain.User
+
+		if err := s.DB.
+			First(
+				&user,
+				"id = ?",
+				req.UserID,
+			).
+			Error; err != nil {
+
+			return nil, errors.New(
+				"data karyawan tidak ditemukan",
+			)
+		}
+
 		updates["user_id"] = req.UserID
 	}
-	if req.Date != "" {
-		d, err := time.Parse("2006-01-02", req.Date)
-		if err == nil {
-			updates["date"] = d
+
+	// --------------------------------------------------
+	// Ambil tanggal dasar
+	// --------------------------------------------------
+
+	recordDate := record.Date.In(baliLocation)
+
+	// --------------------------------------------------
+	// Date
+	// --------------------------------------------------
+
+	if strings.TrimSpace(req.Date) != "" {
+
+		if d, err := time.ParseInLocation(
+			"2006-01-02",
+			req.Date,
+			baliLocation,
+		); err == nil {
+
+			recordDate = d
+
+			updates["date"] = time.Date(
+				d.Year(),
+				d.Month(),
+				d.Day(),
+				0,
+				0,
+				0,
+				0,
+				baliLocation,
+			)
 		}
 	}
+
+	// --------------------------------------------------
+	// Shift
+	// --------------------------------------------------
+
 	if req.Shift > 0 {
 		updates["shift"] = req.Shift
 	}
-	if req.Status != "" {
+
+	// --------------------------------------------------
+	// Status
+	// --------------------------------------------------
+
+	if strings.TrimSpace(req.Status) != "" {
 		updates["status"] = req.Status
 	}
-	if req.CheckIn != "" {
-		t, err := time.Parse("15:04", req.CheckIn)
-		if err == nil {
-			fullTime := time.Date(record.Date.Year(), record.Date.Month(), record.Date.Day(), t.Hour(), t.Minute(), 0, 0, time.Local)
-			updates["check_in"] = &fullTime
+
+	// --------------------------------------------------
+	// Check In
+	// --------------------------------------------------
+
+	if strings.TrimSpace(req.CheckIn) != "" {
+
+		checkIn := parseAttendanceTime(
+			recordDate,
+			req.CheckIn,
+		)
+
+		if checkIn != nil {
+			updates["check_in"] = checkIn
 		}
 	}
-	if req.CheckOut != "" {
-		t, err := time.Parse("15:04", req.CheckOut)
-		if err == nil {
-			fullTime := time.Date(record.Date.Year(), record.Date.Month(), record.Date.Day(), t.Hour(), t.Minute(), 0, 0, time.Local)
-			updates["check_out"] = &fullTime
+
+	// --------------------------------------------------
+	// Check Out
+	// --------------------------------------------------
+
+	if strings.TrimSpace(req.CheckOut) != "" {
+
+		checkOut := parseAttendanceTime(
+			recordDate,
+			req.CheckOut,
+		)
+
+		if checkOut != nil {
+			updates["check_out"] = checkOut
 		}
 	}
+
+	// --------------------------------------------------
+	// Notes
+	// --------------------------------------------------
+
 	updates["notes"] = req.Notes
 
-	if err := s.DB.Model(&record).Updates(updates).Error; err != nil {
+	// --------------------------------------------------
+	// Update
+	// --------------------------------------------------
+
+	if err := s.DB.
+		Model(&record).
+		Updates(updates).
+		Error; err != nil {
+
 		return nil, err
 	}
 
-	s.DB.Preload("User").First(&record, id)
+	// --------------------------------------------------
+	// Reload
+	// --------------------------------------------------
+
+	if err := s.DB.
+		Preload("User").
+		First(
+			&record,
+			id,
+		).
+		Error; err != nil {
+
+		return nil, err
+	}
+
 	return &record, nil
 }
 
-func (s *AttendanceService) DeleteAttendance(id uint) error {
+// ======================================================
+// DELETE ATTENDANCE
+// ======================================================
+
+func (s *AttendanceService) DeleteAttendance(
+	id uint,
+) error {
+
 	var record domain.Attendance
-	if err := s.DB.First(&record, id).Error; err != nil {
-		return errors.New("data absensi tidak ditemukan")
+
+	if err := s.DB.
+		First(
+			&record,
+			id,
+		).
+		Error; err != nil {
+
+		return errors.New(
+			"data absensi tidak ditemukan",
+		)
 	}
-	return s.DB.Delete(&record).Error
+
+	return s.DB.
+		Delete(&record).
+		Error
 }
 
-func (s *AttendanceService) GetSummary(dateStr string) (*domain.AttendanceSummary, error) {
-	if dateStr == "" {
-		dateStr = time.Now().Format("2006-01-02")
+// ======================================================
+// GET SUMMARY
+// ======================================================
+
+func (s *AttendanceService) GetSummary(
+	dateStr string,
+) (*domain.AttendanceSummary, error) {
+
+	if strings.TrimSpace(dateStr) == "" {
+		dateStr = time.Now().
+			In(baliLocation).
+			Format("2006-01-02")
 	}
 
+	date, err := time.ParseInLocation(
+		"2006-01-02",
+		dateStr,
+		baliLocation,
+	)
+
+	if err != nil {
+		return nil, errors.New(
+			"format tanggal tidak valid",
+		)
+	}
+
+	start := time.Date(
+		date.Year(),
+		date.Month(),
+		date.Day(),
+		0,
+		0,
+		0,
+		0,
+		baliLocation,
+	)
+
+	end := start.Add(24 * time.Hour)
+
 	var summary domain.AttendanceSummary
-	query := s.DB.Model(&domain.Attendance{}).Where("DATE(date) = ?", dateStr)
 
-	query.Where("status = ? OR status = ? OR status = ?", "Pagi", "Hadir Pagi", "Hadir").Count(&summary.Pagi)
-	query.Where("status = ? OR status = ?", "Siang", "Hadir Siang").Count(&summary.Siang)
-	query.Where("status = ? OR status = ?", "Libur", "Off").Count(&summary.Libur)
-	query.Where("status = ? OR status = ?", "Lembur", "Full Lembur").Count(&summary.Lembur)
-	query.Where("status = ? OR status = ? OR status = ?", "Bantu", "Setengah Lembur", "Lembur Setengah").Count(&summary.Bantu)
-	query.Where("status = ?", "Sakit").Count(&summary.Sakit)
-	query.Where("status = ? OR status = ?", "Dispensasi", "Izin").Count(&summary.Dispensasi)
+	baseQuery := func() *gorm.DB {
+		return s.DB.
+			Model(&domain.Attendance{}).
+			Where(
+				"date >= ? AND date < ?",
+				start,
+				end,
+			)
+	}
 
-	summary.Total = summary.Pagi + summary.Siang + summary.Libur + summary.Lembur + summary.Bantu + summary.Sakit + summary.Dispensasi
+	// Pagi
+	baseQuery().
+		Where(
+			"status IN ?",
+			[]string{
+				"Pagi",
+				"Hadir Pagi",
+				"Hadir",
+			},
+		).
+		Count(&summary.Pagi)
+
+	// Siang
+	baseQuery().
+		Where(
+			"status IN ?",
+			[]string{
+				"Siang",
+				"Hadir Siang",
+			},
+		).
+		Count(&summary.Siang)
+
+	// Libur
+	baseQuery().
+		Where(
+			"status IN ?",
+			[]string{
+				"Libur",
+				"Off",
+			},
+		).
+		Count(&summary.Libur)
+
+	// Lembur
+	baseQuery().
+		Where(
+			"status IN ?",
+			[]string{
+				"Lembur",
+				"Full Lembur",
+			},
+		).
+		Count(&summary.Lembur)
+
+	// Bantu
+	baseQuery().
+		Where(
+			"status IN ?",
+			[]string{
+				"Bantu",
+				"Setengah Lembur",
+				"Lembur Setengah",
+			},
+		).
+		Count(&summary.Bantu)
+
+	// Sakit
+	baseQuery().
+		Where(
+			"status = ?",
+			"Sakit",
+		).
+		Count(&summary.Sakit)
+
+	// Dispensasi / Izin
+	baseQuery().
+		Where(
+			"status IN ?",
+			[]string{
+				"Dispensasi",
+				"Izin",
+			},
+		).
+		Count(&summary.Dispensasi)
+
+	summary.Total =
+		summary.Pagi +
+			summary.Siang +
+			summary.Libur +
+			summary.Lembur +
+			summary.Bantu +
+			summary.Sakit +
+			summary.Dispensasi
 
 	return &summary, nil
 }
