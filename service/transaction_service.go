@@ -279,7 +279,7 @@ func GroupSalesByInvoice(sales []domain.Sales) []domain.SalesTransactionGroup {
 
 func (s *TransactionService) GetAllSales(f domain.SalesFilter) ([]domain.SalesTransactionGroup, error) {
 	var results []domain.Sales
-	query := s.DB.Preload("Product").Preload("Customer").Preload("User").Where("is_returs IS NULL")
+	query := s.DB.Preload("Product").Preload("Customer").Preload("User").Where("is_returs = ?", false)
 
 	if f.StartDate != "" && f.EndDate != "" {
 		query = query.Where("created_at BETWEEN ? AND ?", f.StartDate+" 00:00:00", f.EndDate+" 23:59:59")
@@ -291,13 +291,10 @@ func (s *TransactionService) GetAllSales(f domain.SalesFilter) ([]domain.SalesTr
 		query = query.Where("payment_method = ?", f.Method)
 	}
 
-	// Filter Hak Akses Berdasarkan Lokasi Pengguna
 	uLoc := strings.TrimSpace(f.UserLocation)
 	if uLoc != "" && !strings.EqualFold(uLoc, "Toko Utama") && !strings.EqualFold(uLoc, "Pusat") {
-		// User dari Toko Paye atau Toko Sudirman hanya boleh melihat data tokonya sendiri
 		query = query.Where("location = ? OR location = ''", uLoc)
 	} else {
-		// User dari Toko Utama dapat memilih melihat toko tertentu atau semua toko
 		if f.Location != "" && !strings.EqualFold(f.Location, "Semua Toko") && !strings.EqualFold(f.Location, "All") {
 			query = query.Where("location = ?", f.Location)
 		}
