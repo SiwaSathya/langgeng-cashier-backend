@@ -25,6 +25,7 @@ type Sales struct {
 	AmountPaid    float64  `json:"amount_paid"`
 	Change        float64  `json:"change"`
 	IsDp          bool     `json:"is_dp"`
+	IsReturs      bool     `gorm:"default:false" json:"is_returs"`
 	CustomerID    *uint    `gorm:"nullable" json:"customer_id"`
 	Status        string   `json:"status"`
 	Shift         *uint    `gorm:"nullable" json:"shift"`
@@ -95,16 +96,16 @@ type PelunasanRequest struct {
 }
 
 type PelunasanResponse struct {
-	ID            uint      `json:"id,omitempty"`
-	Invoice       string    `json:"invoice"`
-	Status        string    `json:"status"`
-	IsDp          bool      `json:"is_dp"`
-	PaymentMethod string    `json:"payment_method"`
-	AmountPaid    float64   `json:"amount_paid"`
-	TotalNetto    float64   `json:"total_netto"`
-	CustomerID    *uint     `json:"customer_id,omitempty"`
-	Customer      Customer  `json:"customer"`
-	Sales         []Sales   `json:"sales"`
+	ID            uint     `json:"id,omitempty"`
+	Invoice       string   `json:"invoice"`
+	Status        string   `json:"status"`
+	IsDp          bool     `json:"is_dp"`
+	PaymentMethod string   `json:"payment_method"`
+	AmountPaid    float64  `json:"amount_paid"`
+	TotalNetto    float64  `json:"total_netto"`
+	CustomerID    *uint    `json:"customer_id,omitempty"`
+	Customer      Customer `json:"customer"`
+	Sales         []Sales  `json:"sales"`
 }
 
 // SalesTransactionGroup mengelompokkan item penjualan berdasarkan transaksi / nota (invoice)
@@ -146,8 +147,8 @@ type UpdateShiftRequest struct {
 }
 
 type ReceiptResponse struct {
-	Category string `json:"category"`
-	Location string `json:"location,omitempty"`
-	Sales    []Sales `json:"sales"`
+	Category string    `json:"category"`
+	Location string    `json:"location,omitempty"`
+	Sales    []Sales   `json:"sales"`
 	Expenses []Expense `json:"expenses"`
 }

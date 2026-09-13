@@ -68,11 +68,16 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 			return err
 		}
 
-		sale.Qty = sale.Qty - float64(req.QtyRetur)
-
-		if err := tx.Save(&sale).Error; err != nil {
-			return err
+		err := tx.Model(&sale).Update("is_returs", true).Error
+		if err != nil {
+			return errors.New("gagal memperbarui status retur pada transaksi penjualan")
 		}
+
+		// sale.Qty = sale.Qty - float64(req.QtyRetur)
+
+		// if err := tx.Save(&sale).Error; err != nil {
+		// 	return err
+		// }
 
 		if !req.IsReturToCompany {
 			err := tx.Model(&domain.Product{}).

@@ -279,7 +279,7 @@ func GroupSalesByInvoice(sales []domain.Sales) []domain.SalesTransactionGroup {
 
 func (s *TransactionService) GetAllSales(f domain.SalesFilter) ([]domain.SalesTransactionGroup, error) {
 	var results []domain.Sales
-	query := s.DB.Preload("Product").Preload("Customer").Preload("User")
+	query := s.DB.Preload("Product").Preload("Customer").Preload("User").Where("is_returs IS NULL")
 
 	if f.StartDate != "" && f.EndDate != "" {
 		query = query.Where("created_at BETWEEN ? AND ?", f.StartDate+" 00:00:00", f.EndDate+" 23:59:59")
@@ -484,15 +484,19 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 		loc = "Toko Utama"
 	}
 
+	fmt.Println(loc)
+
 	var sales []domain.Sales
 	var expenses []domain.Expense
 
 	salesQuery := s.DB.Preload("Product").Preload("User").Preload("Customer").Where("shift IS NULL")
 	expenseQuery := s.DB.Where("tanggal >= ?", time.Now().Format("2006-01-02"))
 
-	if !strings.EqualFold(loc, "Semua Toko") {
-		salesQuery = salesQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
-		expenseQuery = expenseQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+	if strings.EqualFold(loc, "Semua Toko") {
+		salesQuery = salesQuery.Where("shift IS NULL").Where("is_returs = ?", false)
+	} else {
+		salesQuery = salesQuery.Where("location = ? ", loc).Where("shift IS NULL").Where("is_returs = ?", false)
+		expenseQuery = expenseQuery.Where("location = ?", loc)
 	}
 
 	if err := salesQuery.Find(&sales).Error; err != nil {
