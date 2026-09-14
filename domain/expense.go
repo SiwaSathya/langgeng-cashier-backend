@@ -16,6 +16,7 @@ type Expense struct {
 	UserID    string    `gorm:"size:100;index" json:"user_id"`
 	User      User      `gorm:"foreignKey:UserID" json:"user"`
 	Location  string    `gorm:"size:100;index" json:"location"` // Toko Utama, Toko Sudirman, Toko Paye
+	Shift     *string   `gorm:"default:null" json:"shift"`
 }
 
 type ExpenseFilter struct {

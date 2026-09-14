@@ -500,7 +500,7 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 		return nil, err
 	}
 
-	if err := expenseQuery.Find(&expenses).Error; err != nil {
+	if err := expenseQuery.Where("shift IS NULL").Find(&expenses).Error; err != nil {
 		return nil, err
 	}
 
