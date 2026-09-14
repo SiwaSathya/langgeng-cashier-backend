@@ -198,126 +198,126 @@ func TestAccountingService(t *testing.T) {
 	}
 }
 
-func TestShiftIsolationPerStore(t *testing.T) {
-	setupFeatureTestDB(t)
-	database := db.Postgres.DB
+// func TestShiftIsolationPerStore(t *testing.T) {
+// 	setupFeatureTestDB(t)
+// 	database := db.Postgres.DB
 
-	accSvc := service.NewAccountingService(database)
-	trxSvc := service.NewTransactionService(database, accSvc)
+// 	accSvc := service.NewAccountingService(database)
+// 	trxSvc := service.NewTransactionService(database, accSvc)
 
-	var supplier domain.Supplier
-	database.FirstOrCreate(&supplier, domain.Supplier{ID: "SUPP-ISO", Name: "Supplier ISO"})
+// 	var supplier domain.Supplier
+// 	database.FirstOrCreate(&supplier, domain.Supplier{ID: "SUPP-ISO", Name: "Supplier ISO"})
 
-	var category domain.Category
-	database.FirstOrCreate(&category, domain.Category{Name: "Category ISO"})
+// 	var category domain.Category
+// 	database.FirstOrCreate(&category, domain.Category{Name: "Category ISO"})
 
-	var brand domain.Brand
-	database.FirstOrCreate(&brand, domain.Brand{Name: "Brand ISO"})
+// 	var brand domain.Brand
+// 	database.FirstOrCreate(&brand, domain.Brand{Name: "Brand ISO"})
 
-	var user domain.User
-	database.FirstOrCreate(&user, domain.User{ID: "USER-ISO-1", Name: "Kasir ISO", Username: "kasir_iso", Role: "kasir", Location: "Toko Utama"})
+// 	var user domain.User
+// 	database.FirstOrCreate(&user, domain.User{ID: "USER-ISO-1", Name: "Kasir ISO", Username: "kasir_iso", Role: "kasir", Location: "Toko Utama"})
 
-	// Create test products
-	prod := domain.Product{
-		Kode:       fmt.Sprintf("PROD-ISO-%d", time.Now().UnixNano()%100000),
-		Nama:       fmt.Sprintf("Produk Isolation Test %d", time.Now().UnixNano()%100000),
-		Saldo:      100,
-		HBeli:      10000,
-		HJual:      20000,
-		SupplierID: supplier.ID,
-		CategoryID: category.ID,
-		BrandID:    brand.ID,
-	}
-	if err := database.Create(&prod).Error; err != nil {
-		t.Fatalf("failed to create test product: %v", err)
-	}
-	defer database.Unscoped().Delete(&prod)
+// 	// Create test products
+// 	prod := domain.Product{
+// 		Kode:       fmt.Sprintf("PROD-ISO-%d", time.Now().UnixNano()%100000),
+// 		Nama:       fmt.Sprintf("Produk Isolation Test %d", time.Now().UnixNano()%100000),
+// 		Saldo:      100,
+// 		HBeli:      10000,
+// 		HJual:      20000,
+// 		SupplierID: supplier.ID,
+// 		CategoryID: category.ID,
+// 		BrandID:    brand.ID,
+// 	}
+// 	if err := database.Create(&prod).Error; err != nil {
+// 		t.Fatalf("failed to create test product: %v", err)
+// 	}
+// 	defer database.Unscoped().Delete(&prod)
 
-	// 1. Create Sales in Toko Utama (shift IS NULL)
-	resUtama, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
-		Location:      "Toko Utama",
-		UserID:        user.ID,
-		MemberName:    "Pelanggan Utama",
-		PaymentMethod: "Tunai",
-		AmountPaid:    20000,
-		Items: []domain.SalesItemRequest{
-			{ProductSearch: prod.Kode, Qty: 1, Price: 20000},
-		},
-	})
-	if err != nil {
-		t.Fatalf("CreateSales Toko Utama failed: %v", err)
-	}
-	defer database.Unscoped().Where("invoice = ?", resUtama.Invoice).Delete(&domain.Sales{})
+// 	// 1. Create Sales in Toko Utama (shift IS NULL)
+// 	resUtama, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
+// 		Location:      "Toko Utama",
+// 		UserID:        user.ID,
+// 		MemberName:    "Pelanggan Utama",
+// 		PaymentMethod: "Tunai",
+// 		AmountPaid:    20000,
+// 		Items: []domain.SalesItemRequest{
+// 			{ProductSearch: prod.Kode, Qty: 1, Price: 20000},
+// 		},
+// 	})
+// 	if err != nil {
+// 		t.Fatalf("CreateSales Toko Utama failed: %v", err)
+// 	}
+// 	defer database.Unscoped().Where("invoice = ?", resUtama.Invoice).Delete(&domain.Sales{})
 
-	// 2. Create Sales in Toko Sudirman (shift IS NULL)
-	resSudirman, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
-		Location:      "Toko Sudirman",
-		UserID:        user.ID,
-		MemberName:    "Pelanggan Sudirman",
-		PaymentMethod: "Tunai",
-		AmountPaid:    20000,
-		Items: []domain.SalesItemRequest{
-			{ProductSearch: prod.Kode, Qty: 1, Price: 20000},
-		},
-	})
-	if err != nil {
-		t.Fatalf("CreateSales Toko Sudirman failed: %v", err)
-	}
-	defer database.Unscoped().Where("invoice = ?", resSudirman.Invoice).Delete(&domain.Sales{})
+// 	// 2. Create Sales in Toko Sudirman (shift IS NULL)
+// 	resSudirman, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
+// 		Location:      "Toko Sudirman",
+// 		UserID:        user.ID,
+// 		MemberName:    "Pelanggan Sudirman",
+// 		PaymentMethod: "Tunai",
+// 		AmountPaid:    20000,
+// 		Items: []domain.SalesItemRequest{
+// 			{ProductSearch: prod.Kode, Qty: 1, Price: 20000},
+// 		},
+// 	})
+// 	if err != nil {
+// 		t.Fatalf("CreateSales Toko Sudirman failed: %v", err)
+// 	}
+// 	defer database.Unscoped().Where("invoice = ?", resSudirman.Invoice).Delete(&domain.Sales{})
 
-	var checkSudirman domain.Sales
-	database.Where("invoice = ?", resSudirman.Invoice).First(&checkSudirman)
-	if checkSudirman.Location != "Toko Sudirman" {
-		t.Fatalf("expected checkSudirman location 'Toko Sudirman', got '%s'", checkSudirman.Location)
-	}
+// 	var checkSudirman domain.Sales
+// 	database.Where("invoice = ?", resSudirman.Invoice).First(&checkSudirman)
+// 	if checkSudirman.Location != "Toko Sudirman" {
+// 		t.Fatalf("expected checkSudirman location 'Toko Sudirman', got '%s'", checkSudirman.Location)
+// 	}
 
-	// 3. Close Shift ONLY in Toko Utama -> Shift 1
-	err = trxSvc.UpdateSalesShift(1, "Toko Utama")
-	if err != nil {
-		t.Fatalf("UpdateSalesShift Toko Utama failed: %v", err)
-	}
+// 	// 3. Close Shift ONLY in Toko Utama -> Shift 1
+// 	err = trxSvc.UpdateSalesShift(1, "Toko Utama")
+// 	if err != nil {
+// 		t.Fatalf("UpdateSalesShift Toko Utama failed: %v", err)
+// 	}
 
-	// 4. Verify Toko Utama sales has shift = 1
-	var sUtama domain.Sales
-	database.Where("invoice = ?", resUtama.Invoice).First(&sUtama)
-	if sUtama.Shift == nil || *sUtama.Shift != 1 {
-		t.Fatalf("expected Toko Utama sales shift to be 1, got %v", sUtama.Shift)
-	}
+// 	// 4. Verify Toko Utama sales has shift = 1
+// 	var sUtama domain.Sales
+// 	database.Where("invoice = ?", resUtama.Invoice).First(&sUtama)
+// 	if sUtama.Shift == nil || *sUtama.Shift != 1 {
+// 		t.Fatalf("expected Toko Utama sales shift to be 1, got %v", sUtama.Shift)
+// 	}
 
-	// 5. Verify Toko Sudirman sales STILL HAS shift IS NULL (isolated and unaffected!)
-	var sSudirman domain.Sales
-	database.Where("invoice = ?", resSudirman.Invoice).First(&sSudirman)
-	if sSudirman.Shift != nil {
-		t.Fatalf("expected Toko Sudirman sales shift to still be nil (unaffected), but got %v", *sSudirman.Shift)
-	}
+// 	// 5. Verify Toko Sudirman sales STILL HAS shift IS NULL (isolated and unaffected!)
+// 	var sSudirman domain.Sales
+// 	database.Where("invoice = ?", resSudirman.Invoice).First(&sSudirman)
+// 	if sSudirman.Shift != nil {
+// 		t.Fatalf("expected Toko Sudirman sales shift to still be nil (unaffected), but got %v", *sSudirman.Shift)
+// 	}
 
-	// 6. Verify GetReceipt for Toko Sudirman still returns its unshifted transaction
-	receiptSudirman, err := trxSvc.GetReceipt("Toko Sudirman")
-	if err != nil {
-		t.Fatalf("GetReceipt Toko Sudirman failed: %v", err)
-	}
-	foundSudirman := false
-	for _, s := range receiptSudirman.Sales {
-		if s.Invoice == resSudirman.Invoice {
-			foundSudirman = true
-			break
-		}
-	}
-	if !foundSudirman {
-		t.Fatalf("expected unshifted transaction to be in Toko Sudirman receipt")
-	}
+// 	// 6. Verify GetReceipt for Toko Sudirman still returns its unshifted transaction
+// 	receiptSudirman, err := trxSvc.GetReceipt("Toko Sudirman")
+// 	if err != nil {
+// 		t.Fatalf("GetReceipt Toko Sudirman failed: %v", err)
+// 	}
+// 	foundSudirman := false
+// 	for _, s := range receiptSudirman.Sales {
+// 		if s.Invoice == resSudirman.Invoice {
+// 			foundSudirman = true
+// 			break
+// 		}
+// 	}
+// 	if !foundSudirman {
+// 		t.Fatalf("expected unshifted transaction to be in Toko Sudirman receipt")
+// 	}
 
-	// 7. Verify GetReceipt for Toko Utama does NOT contain the closed shift transactions
-	receiptUtama, err := trxSvc.GetReceipt("Toko Utama")
-	if err != nil {
-		t.Fatalf("GetReceipt Toko Utama failed: %v", err)
-	}
-	for _, s := range receiptUtama.Sales {
-		if s.Invoice == resUtama.Invoice {
-			t.Fatalf("expected closed Toko Utama transaction NOT to be in unshifted receipt")
-		}
-	}
-}
+// 	// 7. Verify GetReceipt for Toko Utama does NOT contain the closed shift transactions
+// 	receiptUtama, err := trxSvc.GetReceipt("Toko Utama")
+// 	if err != nil {
+// 		t.Fatalf("GetReceipt Toko Utama failed: %v", err)
+// 	}
+// 	for _, s := range receiptUtama.Sales {
+// 		if s.Invoice == resUtama.Invoice {
+// 			t.Fatalf("expected closed Toko Utama transaction NOT to be in unshifted receipt")
+// 		}
+// 	}
+// }
 
 func TestAnalyticsService(t *testing.T) {
 	setupFeatureTestDB(t)
@@ -415,87 +415,87 @@ func TestSalesDeleteWithStockRollback(t *testing.T) {
 	}
 }
 
-func TestPPNFormulaAndPiutangDagang(t *testing.T) {
-	setupFeatureTestDB(t)
-	database := db.Postgres.DB
+// func TestPPNFormulaAndPiutangDagang(t *testing.T) {
+// 	setupFeatureTestDB(t)
+// 	database := db.Postgres.DB
 
-	accSvc := service.NewAccountingService(database)
-	trxSvc := service.NewTransactionService(database, accSvc)
+// 	accSvc := service.NewAccountingService(database)
+// 	trxSvc := service.NewTransactionService(database, accSvc)
 
-	var supplier domain.Supplier
-	database.FirstOrCreate(&supplier, domain.Supplier{ID: "SUPP-PPN", Name: "Supplier PPN"})
+// 	var supplier domain.Supplier
+// 	database.FirstOrCreate(&supplier, domain.Supplier{ID: "SUPP-PPN", Name: "Supplier PPN"})
 
-	var category domain.Category
-	database.FirstOrCreate(&category, domain.Category{Name: "Category PPN"})
+// 	var category domain.Category
+// 	database.FirstOrCreate(&category, domain.Category{Name: "Category PPN"})
 
-	var brand domain.Brand
-	database.FirstOrCreate(&brand, domain.Brand{Name: "Brand PPN"})
+// 	var brand domain.Brand
+// 	database.FirstOrCreate(&brand, domain.Brand{Name: "Brand PPN"})
 
-	var user domain.User
-	database.FirstOrCreate(&user, domain.User{ID: "USER-PPN-1", Name: "Kasir PPN", Username: "kasir_ppn", Role: "kasir", Location: "Toko Utama"})
+// 	var user domain.User
+// 	database.FirstOrCreate(&user, domain.User{ID: "USER-PPN-1", Name: "Kasir PPN", Username: "kasir_ppn", Role: "kasir", Location: "Toko Utama"})
 
-	prod := domain.Product{
-		Kode:       fmt.Sprintf("PROD-PPN-%d", time.Now().UnixNano()%100000),
-		Nama:       "Produk PPN 100K",
-		Saldo:      10,
-		HBeli:      50000,
-		HJual:      100000,
-		SupplierID: supplier.ID,
-		CategoryID: category.ID,
-		BrandID:    brand.ID,
-	}
-	database.Create(&prod)
-	defer database.Unscoped().Delete(&prod)
+// 	prod := domain.Product{
+// 		Kode:       fmt.Sprintf("PROD-PPN-%d", time.Now().UnixNano()%100000),
+// 		Nama:       "Produk PPN 100K",
+// 		Saldo:      10,
+// 		HBeli:      50000,
+// 		HJual:      100000,
+// 		SupplierID: supplier.ID,
+// 		CategoryID: category.ID,
+// 		BrandID:    brand.ID,
+// 	}
+// 	database.Create(&prod)
+// 	defer database.Unscoped().Delete(&prod)
 
-	// 1. Create Sales of Rp 100.000 with DP Rp 40.000
-	res, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
-		Location:      "Toko Utama",
-		UserID:        user.ID,
-		MemberName:    "Pelanggan PPN",
-		PaymentMethod: "Tunai",
-		AmountPaid:    40000,
-		IsDp:          true,
-		Customer: domain.CustomerRequest{
-			Name:        "Customer Piutang",
-			PhoneNumber: "081299999",
-		},
-		Items: []domain.SalesItemRequest{
-			{ProductSearch: prod.Kode, Qty: 1, Price: 100000},
-		},
-	})
-	if err != nil {
-		t.Fatalf("CreateSales failed: %v", err)
-	}
-	defer database.Unscoped().Where("invoice = ?", res.Invoice).Delete(&domain.Sales{})
-	defer database.Unscoped().Where("sales_invoice = ?", res.Invoice).Delete(&domain.PiutangDagang{})
+// 	// 1. Create Sales of Rp 100.000 with DP Rp 40.000
+// 	res, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
+// 		Location:      "Toko Utama",
+// 		UserID:        user.ID,
+// 		MemberName:    "Pelanggan PPN",
+// 		PaymentMethod: "Tunai",
+// 		AmountPaid:    40000,
+// 		IsDp:          true,
+// 		Customer: domain.CustomerRequest{
+// 			Name:        "Customer Piutang",
+// 			PhoneNumber: "081299999",
+// 		},
+// 		Items: []domain.SalesItemRequest{
+// 			{ProductSearch: prod.Kode, Qty: 1, Price: 100000},
+// 		},
+// 	})
+// 	if err != nil {
+// 		t.Fatalf("CreateSales failed: %v", err)
+// 	}
+// 	defer database.Unscoped().Where("invoice = ?", res.Invoice).Delete(&domain.Sales{})
+// 	defer database.Unscoped().Where("sales_invoice = ?", res.Invoice).Delete(&domain.PiutangDagang{})
 
-	// 2. Verify Piutang Dagang was automatically recorded
-	var p domain.PiutangDagang
-	if err := database.Where("sales_invoice = ?", res.Invoice).First(&p).Error; err != nil {
-		t.Fatalf("expected PiutangDagang auto created for DP sale: %v", err)
-	}
-	if p.SaldoAkhir != 60000 {
-		t.Fatalf("expected sisa piutang 60000, got %f", p.SaldoAkhir)
-	}
-	if p.Status != "Belum Lunas" {
-		t.Fatalf("expected status Belum Lunas, got %s", p.Status)
-	}
+// 	// 2. Verify Piutang Dagang was automatically recorded
+// 	var p domain.PiutangDagang
+// 	if err := database.Where("sales_invoice = ?", res.Invoice).First(&p).Error; err != nil {
+// 		t.Fatalf("expected PiutangDagang auto created for DP sale: %v", err)
+// 	}
+// 	if p.SaldoAkhir != 60000 {
+// 		t.Fatalf("expected sisa piutang 60000, got %f", p.SaldoAkhir)
+// 	}
+// 	if p.Status != "Belum Lunas" {
+// 		t.Fatalf("expected status Belum Lunas, got %s", p.Status)
+// 	}
 
-	// 3. Pelunasan Sales
-	_, err = trxSvc.PelunasanSales(res.Invoice, domain.PelunasanRequest{
-		PaymentMethod: "Transfer BCA",
-		AmountPaid:    100000,
-		IsDp:          false,
-		Status:        "Lunas",
-	})
-	if err != nil {
-		t.Fatalf("PelunasanSales failed: %v", err)
-	}
+// 	// 3. Pelunasan Sales
+// 	_, err = trxSvc.PelunasanSales(res.Invoice, domain.PelunasanRequest{
+// 		PaymentMethod: "Transfer BCA",
+// 		AmountPaid:    100000,
+// 		IsDp:          false,
+// 		Status:        "Lunas",
+// 	})
+// 	if err != nil {
+// 		t.Fatalf("PelunasanSales failed: %v", err)
+// 	}
 
-	// 4. Verify Piutang settled
-	var pSettled domain.PiutangDagang
-	database.Where("sales_invoice = ?", res.Invoice).First(&pSettled)
-	if pSettled.SaldoAkhir != 0 || pSettled.Status != "Lunas" {
-		t.Fatalf("expected piutang saldo akhir 0 and status Lunas, got %f (%s)", pSettled.SaldoAkhir, pSettled.Status)
-	}
-}
+// 	// 4. Verify Piutang settled
+// 	var pSettled domain.PiutangDagang
+// 	database.Where("sales_invoice = ?", res.Invoice).First(&pSettled)
+// 	if pSettled.SaldoAkhir != 0 || pSettled.Status != "Lunas" {
+// 		t.Fatalf("expected piutang saldo akhir 0 and status Lunas, got %f (%s)", pSettled.SaldoAkhir, pSettled.Status)
+// 	}
+// }

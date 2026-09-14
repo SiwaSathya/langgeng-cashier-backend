@@ -29,12 +29,18 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 		return nil, errors.New("daftar barang belanjaan tidak boleh kosong")
 	}
 
+	// Validasi khusus transaksi Bon / Utang
+	if req.IsBon {
+		if req.Customer.Name == "" || req.Customer.PhoneNumber == "" {
+			return nil, errors.New("transaksi bon/utang wajib mengisi nama dan no. telepon customer")
+		}
+	}
+
 	invoice := req.Invoice
 	if invoice == "" {
 		invoice = fmt.Sprintf("PJL-%d", time.Now().UnixNano())
 	}
 
-	// Tentukan lokasi toko (Toko Utama / Toko Sudirman / Toko Paye)
 	location := req.Location
 	if location == "" && req.UserID != "" {
 		var user domain.User
@@ -46,14 +52,37 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 		location = "Toko Utama"
 	}
 
+	var totalPaidFromMethods float64
+	var methodNames []string
+	for _, pm := range req.PaymentMethods {
+		if amt, err := strconv.ParseFloat(pm.Amount, 64); err == nil {
+			totalPaidFromMethods += amt
+		}
+		if pm.Type != "" {
+			methodNames = append(methodNames, pm.Type)
+		}
+	}
+
+	if req.AmountPaid == 0 && totalPaidFromMethods > 0 {
+		req.AmountPaid = totalPaidFromMethods
+	}
+	if req.PaymentMethod == "" {
+		if len(methodNames) > 0 {
+			req.PaymentMethod = strings.Join(methodNames, ", ")
+		} else if req.IsBon {
+			req.PaymentMethod = "Bon / Utang"
+		}
+	}
+
 	var totalNettoAll float64
 	var salesRecords []domain.Sales
+	var createdPaymentMethods []domain.PaymentMethod
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		var customerID *uint
 
-		// 1. Simpan data Customer sekali per nota jika transaksi DP atau data customer diisi
-		if req.IsDp || req.Customer.Name != "" || req.Customer.PhoneNumber != "" {
+		// 1. Simpan data Customer (wajib untuk DP dan Bon)
+		if req.IsDp || req.IsBon || req.Customer.Name != "" || req.Customer.PhoneNumber != "" {
 			customer := domain.Customer{
 				Name:           req.Customer.Name,
 				Age:            req.Customer.Age,
@@ -70,12 +99,15 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 			customerID = &customer.ID
 		}
 
+		// Tentukan status nota
 		status := "Lunas"
-		if req.IsDp {
+		if req.IsBon {
+			status = "Bon"
+		} else if req.IsDp {
 			status = "DP"
 		}
 
-		// 2. Loop setiap item barang dalam nota
+		// 2. Simpan setiap item produk
 		for _, item := range req.Items {
 			if item.Qty <= 0 {
 				return fmt.Errorf("jumlah qty untuk barang %s harus lebih dari 0", item.ProductSearch)
@@ -112,6 +144,7 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 				PaymentMethod: req.PaymentMethod,
 				AmountPaid:    req.AmountPaid,
 				IsDp:          req.IsDp,
+				IsBon:         req.IsBon,
 				CustomerID:    customerID,
 				Status:        status,
 				Shift:         nil,
@@ -121,7 +154,6 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 				return err
 			}
 
-			// Potong Stok Produk
 			if err := tx.Model(&prod).Update("saldo", prod.Saldo-item.Qty).Error; err != nil {
 				return err
 			}
@@ -129,10 +161,58 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 			salesRecords = append(salesRecords, sales)
 		}
 
-		// 3. Otomatisasi Pencatatan Jurnal Double-Entry ke Buku Harian
+		// 3. Simpan Payment Method
+		if len(salesRecords) > 0 {
+			primarySalesID := salesRecords[0].ID
+
+			if req.IsBon && len(req.PaymentMethods) == 0 {
+				// Catat transaksi bon nominal 0
+				record := domain.PaymentMethod{
+					SalesID: primarySalesID,
+					Type:    "Bon / Utang",
+					Amount:  "0",
+					Status:  "Belum Lunas",
+				}
+				if err := tx.Create(&record).Error; err != nil {
+					return err
+				}
+				createdPaymentMethods = append(createdPaymentMethods, record)
+			} else if len(req.PaymentMethods) > 0 {
+				for _, pm := range req.PaymentMethods {
+					pmStatus := pm.Status
+					if pmStatus == "" {
+						pmStatus = status
+					}
+					record := domain.PaymentMethod{
+						SalesID: primarySalesID,
+						Type:    pm.Type,
+						Amount:  pm.Amount,
+						Status:  pmStatus,
+					}
+					if err := tx.Create(&record).Error; err != nil {
+						return err
+					}
+					createdPaymentMethods = append(createdPaymentMethods, record)
+				}
+			} else {
+				record := domain.PaymentMethod{
+					SalesID: primarySalesID,
+					Type:    req.PaymentMethod,
+					Amount:  fmt.Sprintf("%.0f", req.AmountPaid),
+					Status:  status,
+				}
+				if err := tx.Create(&record).Error; err != nil {
+					return err
+				}
+				createdPaymentMethods = append(createdPaymentMethods, record)
+			}
+		}
+
+		// 4. Catat Jurnal & Piutang Dagang jika DP atau Bon
 		if s.AccountingSvc != nil {
-			s.AccountingSvc.AutoPostSalesJournal(tx, invoice, req.PaymentMethod, totalNettoAll, req.AmountPaid, req.IsDp, time.Now())
-			if req.IsDp {
+			isCredit := req.IsDp || req.IsBon
+			s.AccountingSvc.AutoPostSalesJournal(tx, invoice, req.PaymentMethod, totalNettoAll, req.AmountPaid, isCredit, time.Now())
+			if isCredit {
 				s.AccountingSvc.AutoRecordSalesPiutang(tx, customerID, req.Customer.Name, req.Customer.PhoneNumber, invoice, totalNettoAll, req.AmountPaid, time.Now())
 			}
 		}
@@ -145,18 +225,23 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 	}
 
 	change := req.AmountPaid - totalNettoAll
+	if change < 0 {
+		change = 0
+	}
 
 	return &domain.SalesResponse{
-		Invoice:       invoice,
-		MemberName:    req.MemberName,
-		UserID:        req.UserID,
-		Location:      location,
-		PaymentMethod: req.PaymentMethod,
-		AmountPaid:    req.AmountPaid,
-		TotalNetto:    totalNettoAll,
-		Change:        change,
-		Status:        salesRecords[0].Status,
-		IsDp:          req.IsDp,
+		Invoice:        invoice,
+		MemberName:     req.MemberName,
+		UserID:         req.UserID,
+		Location:       location,
+		PaymentMethod:  req.PaymentMethod,
+		AmountPaid:     req.AmountPaid,
+		TotalNetto:     totalNettoAll,
+		Change:         change,
+		Status:         salesRecords[0].Status,
+		IsDp:           req.IsDp,
+		IsBon:          req.IsBon,
+		PaymentMethods: createdPaymentMethods,
 	}, nil
 }
 
@@ -234,23 +319,25 @@ func GroupSalesByInvoice(sales []domain.Sales) []domain.SalesTransactionGroup {
 			}
 
 			group := domain.SalesTransactionGroup{
-				Invoice:       s.Invoice,
-				CreatedAt:     s.CreatedAt,
-				UpdatedAt:     s.UpdatedAt,
-				MemberName:    s.MemberName,
-				UserID:        s.UserID,
-				User:          s.User,
-				Location:      loc,
-				CustomerID:    s.CustomerID,
-				Customer:      s.Customer,
-				PaymentMethod: s.PaymentMethod,
-				AmountPaid:    s.AmountPaid,
-				IsDp:          s.IsDp,
-				Status:        s.Status,
-				Shift:         s.Shift,
-				TotalNetto:    s.TotalNetto,
-				TotalQty:      s.Qty,
-				Items:         []domain.Sales{s},
+				Invoice:        s.Invoice,
+				CreatedAt:      s.CreatedAt,
+				UpdatedAt:      s.UpdatedAt,
+				MemberName:     s.MemberName,
+				UserID:         s.UserID,
+				User:           s.User,
+				Location:       loc,
+				CustomerID:     s.CustomerID,
+				Customer:       s.Customer,
+				PaymentMethod:  s.PaymentMethod,
+				AmountPaid:     s.AmountPaid,
+				IsDp:           s.IsDp,
+				Status:         s.Status,
+				Shift:          s.Shift,
+				TotalNetto:     s.TotalNetto,
+				TotalQty:       s.Qty,
+				IsBon:          s.IsBon,
+				Items:          []domain.Sales{s},
+				PaymentMethods: append([]domain.PaymentMethod{}, s.PaymentMethods...),
 			}
 			groups = append(groups, group)
 			groupMap[inv] = len(groups) - 1
@@ -258,6 +345,9 @@ func GroupSalesByInvoice(sales []domain.Sales) []domain.SalesTransactionGroup {
 			groups[idx].Items = append(groups[idx].Items, s)
 			groups[idx].TotalNetto += s.TotalNetto
 			groups[idx].TotalQty += s.Qty
+			if len(s.PaymentMethods) > 0 {
+				groups[idx].PaymentMethods = append(groups[idx].PaymentMethods, s.PaymentMethods...)
+			}
 			if s.UpdatedAt.After(groups[idx].UpdatedAt) {
 				groups[idx].UpdatedAt = s.UpdatedAt
 			}
@@ -279,7 +369,11 @@ func GroupSalesByInvoice(sales []domain.Sales) []domain.SalesTransactionGroup {
 
 func (s *TransactionService) GetAllSales(f domain.SalesFilter) ([]domain.SalesTransactionGroup, error) {
 	var results []domain.Sales
-	query := s.DB.Preload("Product").Preload("Customer").Preload("User").Where("is_returs = ?", false)
+	query := s.DB.Preload("Product").
+		Preload("Customer").
+		Preload("User").
+		Preload("PaymentMethods").
+		Where("is_returs = ?", false)
 
 	if f.StartDate != "" && f.EndDate != "" {
 		query = query.Where("created_at BETWEEN ? AND ?", f.StartDate+" 00:00:00", f.EndDate+" 23:59:59")
@@ -347,7 +441,13 @@ func (s *TransactionService) GetAllExpenditure(f domain.ExpenseFilter) (map[stri
 
 func (a *TransactionService) GetUserSales(userId uint) ([]domain.SalesTransactionGroup, error) {
 	var sales []domain.Sales
-	err := a.DB.Preload("Product").Preload("Customer").Preload("User").Where("user_id = ?", userId).Order("created_at desc, id desc").Find(&sales).Error
+	err := a.DB.Preload("Product").
+		Preload("Customer").
+		Preload("User").
+		Preload("PaymentMethods").
+		Where("user_id = ?", userId).
+		Order("created_at desc, id desc").
+		Find(&sales).Error
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +478,8 @@ func (s *TransactionService) PelunasanSales(identifier string, req domain.Peluna
 			return errors.New("data transaksi penjualan dengan nota tersebut tidak ditemukan")
 		}
 
-		if !salesList[0].IsDp && salesList[0].Status == "Lunas" {
+		// Cek apakah transaksi memang belum lunas (bisa dari DP atau Bon)
+		if !salesList[0].IsDp && !salesList[0].IsBon && salesList[0].Status == "Lunas" {
 			return errors.New("transaksi pada nota ini sudah berstatus lunas")
 		}
 
@@ -392,6 +493,8 @@ func (s *TransactionService) PelunasanSales(identifier string, req domain.Peluna
 			paymentMethod = salesList[0].PaymentMethod
 		}
 
+		// Hitung nominal pelunasan yang baru dibayarkan
+		previousPaid := salesList[0].AmountPaid
 		amountPaid := req.AmountPaid
 		if amountPaid <= 0 {
 			var totalNetto float64
@@ -401,9 +504,16 @@ func (s *TransactionService) PelunasanSales(identifier string, req domain.Peluna
 			amountPaid = totalNetto
 		}
 
+		pelunasanAmount := amountPaid - previousPaid
+		if pelunasanAmount <= 0 {
+			pelunasanAmount = amountPaid
+		}
+
+		// 1. UPDATE STATUS SALES & RESET FLAG DP SERTA BON
 		updates := map[string]interface{}{
 			"status":         status,
-			"is_dp":          req.IsDp,
+			"is_dp":          false,
+			"is_bon":         false,
 			"payment_method": paymentMethod,
 			"amount_paid":    amountPaid,
 			"updated_at":     time.Now(),
@@ -413,14 +523,50 @@ func (s *TransactionService) PelunasanSales(identifier string, req domain.Peluna
 			return err
 		}
 
-		if err := tx.Preload("Product").Preload("Customer").Where("invoice = ?", invoice).Find(&salesList).Error; err != nil {
+		// 2. SIMPAN CATATAN PEMBAYARAN KE TABEL payment_methods DENGAN STATUS "Pelunasan"
+		primarySalesID := salesList[0].ID
+
+		if len(req.PaymentMethods) > 0 {
+			for _, pm := range req.PaymentMethods {
+				record := domain.PaymentMethod{
+					SalesID: primarySalesID,
+					Type:    pm.Type,
+					Amount:  pm.Amount,
+					Status:  "Pelunasan",
+				}
+				if err := tx.Create(&record).Error; err != nil {
+					return fmt.Errorf("gagal menyimpan metode pelunasan: %w", err)
+				}
+			}
+		} else {
+			// Fallback parsing nama metode pelunasan dari string gabungan
+			methodType := paymentMethod
+			if idxStart := strings.Index(paymentMethod, "[Pelunasan:"); idxStart != -1 {
+				extracted := paymentMethod[idxStart+len("[Pelunasan:"):]
+				if idxEnd := strings.Index(extracted, "]"); idxEnd != -1 {
+					methodType = strings.TrimSpace(extracted[:idxEnd])
+				}
+			}
+
+			record := domain.PaymentMethod{
+				SalesID: primarySalesID,
+				Type:    methodType,
+				Amount:  fmt.Sprintf("%.0f", pelunasanAmount),
+				Status:  "Pelunasan",
+			}
+			if err := tx.Create(&record).Error; err != nil {
+				return fmt.Errorf("gagal menyimpan metode pelunasan: %w", err)
+			}
+		}
+
+		if err := tx.Preload("Product").Preload("Customer").Preload("PaymentMethods").Where("invoice = ?", invoice).Find(&salesList).Error; err != nil {
 			return err
 		}
 
-		// Update / Catat Jurnal Pelunasan Otomatis
+		// 3. UPDATE JURNAL & SETTLEMENT PIUTANG
 		if s.AccountingSvc != nil {
-			s.AccountingSvc.AutoPostSalesJournal(tx, invoice, paymentMethod, amountPaid, amountPaid, false, time.Now())
-			s.AccountingSvc.AutoSettleSalesPiutang(tx, invoice, amountPaid)
+			s.AccountingSvc.AutoPostSalesJournal(tx, invoice, paymentMethod, pelunasanAmount, pelunasanAmount, false, time.Now())
+			s.AccountingSvc.AutoSettleSalesPiutang(tx, invoice, pelunasanAmount)
 		}
 
 		return nil
@@ -481,18 +627,22 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 		loc = "Toko Utama"
 	}
 
-	fmt.Println(loc)
-
 	var sales []domain.Sales
 	var expenses []domain.Expense
 
-	salesQuery := s.DB.Preload("Product").Preload("User").Preload("Customer").Where("shift IS NULL")
+	// Tambahkan .Preload("PaymentMethods") di sini
+	salesQuery := s.DB.Preload("Product").
+		Preload("User").
+		Preload("Customer").
+		Preload("PaymentMethods").
+		Where("shift IS NULL")
+
 	expenseQuery := s.DB.Where("tanggal >= ?", time.Now().Format("2006-01-02"))
 
 	if strings.EqualFold(loc, "Semua Toko") {
-		salesQuery = salesQuery.Where("shift IS NULL").Where("is_returs = ?", false)
+		salesQuery = salesQuery.Where("is_returs = ?", false)
 	} else {
-		salesQuery = salesQuery.Where("location = ? ", loc).Where("shift IS NULL").Where("is_returs = ?", false)
+		salesQuery = salesQuery.Where("location = ?", loc).Where("is_returs = ?", false)
 		expenseQuery = expenseQuery.Where("location = ?", loc)
 	}
 
@@ -551,8 +701,9 @@ func (s *TransactionService) DeleteSales(identifier string) error {
 			return errors.New("data transaksi penjualan tidak ditemukan")
 		}
 
-		// 1. Kembalikan semua stok barang yang terjual pada nota ini
+		var salesIDs []uint
 		for _, item := range salesList {
+			salesIDs = append(salesIDs, item.ID)
 			if item.ProductID > 0 && item.Qty > 0 {
 				var prod domain.Product
 				if err := tx.First(&prod, item.ProductID).Error; err == nil {
@@ -561,7 +712,14 @@ func (s *TransactionService) DeleteSales(identifier string) error {
 			}
 		}
 
-		// 2. Hapus jurnal otomatis terkait nota jika ada
+		// 1. Hapus payment methods terkait
+		if len(salesIDs) > 0 {
+			if err := tx.Where("sales_id IN ?", salesIDs).Delete(&domain.PaymentMethod{}).Error; err != nil {
+				return err
+			}
+		}
+
+		// 2. Hapus jurnal otomatis
 		entryNumber := fmt.Sprintf("JV-SALES-%s", invoice)
 		var journal domain.JournalEntry
 		if err := tx.Where("entry_number = ?", entryNumber).First(&journal).Error; err == nil {
@@ -569,7 +727,7 @@ func (s *TransactionService) DeleteSales(identifier string) error {
 			tx.Delete(&journal)
 		}
 
-		// 3. Hapus catatan piutang dagang jika ada
+		// 3. Hapus piutang
 		tx.Where("sales_invoice = ?", invoice).Delete(&domain.PiutangDagang{})
 
 		// 4. Hapus baris penjualan

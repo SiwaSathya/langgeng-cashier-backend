@@ -70,6 +70,7 @@ func RegisterTableToMigrate(db *gorm.DB) {
 		&domain.JournalEntry{},
 		&domain.JournalItem{},
 		&domain.PiutangDagang{},
+		&domain.PaymentMethod{},
 	)
 
 	if e != nil {

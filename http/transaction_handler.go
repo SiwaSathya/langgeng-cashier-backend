@@ -98,11 +98,7 @@ func (h *TransactionHandler) UpdateSalesShift(
 		)
 	}
 
-	err := h.Service.UpdateSalesShift(
-		req.Shift,
-		req.Location,
-	)
-
+	err := h.Service.UpdateSalesShift(req.Shift, req.Location)
 	if err != nil {
 		return c.Status(
 			500,
@@ -182,6 +178,7 @@ func (h *TransactionHandler) CreateSales(c *fiber.Ctx) error {
 		txReq.PaymentMethod = items[0].PaymentMethod
 		txReq.AmountPaid = items[0].AmountPaid
 		txReq.IsDp = items[0].IsDp
+		txReq.IsBon = items[0].IsBon
 		txReq.Customer = items[0].Customer
 
 		for _, it := range items {
@@ -208,6 +205,7 @@ func (h *TransactionHandler) CreateSales(c *fiber.Ctx) error {
 				txReq.AmountPaid = single.AmountPaid
 				txReq.IsDp = single.IsDp
 				txReq.Customer = single.Customer
+				txReq.IsBon = single.IsBon
 				txReq.Items = append(txReq.Items, domain.SalesItemRequest{
 					ProductSearch: single.ProductSearch,
 					Qty:           single.Qty,
