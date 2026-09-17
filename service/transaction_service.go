@@ -668,13 +668,29 @@ func (s *TransactionService) UpdateSalesShift(shift uint, location string) error
 		loc = "Toko Utama"
 	}
 
-	q := s.DB.Model(&domain.Sales{}).Where("shift IS NULL")
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		// 1. Update shift pada data Sales yang belum memiliki shift
+		salesQuery := tx.Model(&domain.Sales{}).Where("shift IS NULL")
+		if !strings.EqualFold(loc, "Semua Toko") {
+			salesQuery = salesQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+		}
 
-	if !strings.EqualFold(loc, "Semua Toko") {
-		q = q.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
-	}
+		if err := salesQuery.Update("shift", shift).Error; err != nil {
+			return fmt.Errorf("gagal memperbarui shift sales: %w", err)
+		}
 
-	return q.Update("shift", shift).Error
+		// 2. Update shift pada data Expense (Pengeluaran) yang belum memiliki shift
+		expenseQuery := tx.Model(&domain.Expense{}).Where("shift IS NULL")
+		if !strings.EqualFold(loc, "Semua Toko") {
+			expenseQuery = expenseQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+		}
+
+		if err := expenseQuery.Update("shift", shift).Error; err != nil {
+			return fmt.Errorf("gagal memperbarui shift expense: %w", err)
+		}
+
+		return nil
+	})
 }
 
 func (s *TransactionService) DeleteSales(identifier string) error {
