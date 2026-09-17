@@ -19,6 +19,7 @@ func (h *ReturHandler) RegisterRoutes(router fiber.Router) {
 	api := router.Group("/api")
 	api.Post("/retur", h.PostRetur)
 	api.Get("/retur", h.GetReturList)
+	api.Post("/retur/direct", h.PostDirectRetur) // Rute baru: Retur produk langsung tanpa nota
 	api.Put("/retur/:id/batal", h.CancelRetur)
 	api.Put("/retur/:id/distributor", h.ToDistributor)
 	api.Put("/retur/:id/selesai", h.CompleteRetur)
@@ -46,6 +47,32 @@ func (h *ReturHandler) PostRetur(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Retur berhasil diproses",
+		"data":    result,
+	})
+}
+
+func (h *ReturHandler) PostDirectRetur(c *fiber.Ctx) error {
+	var req service.DirectReturRequest
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Format data tidak valid: " + err.Error(),
+		})
+	}
+
+	if req.Status == "" {
+		req.Status = "Retur Sukses"
+	}
+
+	result, err := h.returService.CreateDirectRetur(req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Retur langsung berhasil diproses",
 		"data":    result,
 	})
 }

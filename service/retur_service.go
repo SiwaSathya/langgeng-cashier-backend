@@ -3,6 +3,7 @@ package service
 import (
 	"backend-cashier/domain"
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -18,12 +19,22 @@ type ReturRequest struct {
 	QtyRetur         int    `json:"qty_retur" binding:"required,gt=0"`
 }
 
+type DirectReturRequest struct {
+	ProductID        uint   `json:"product_id"`
+	QtyRetur         int    `json:"qty_retur"`
+	Reason           string `json:"reason"`
+	Status           string `json:"status"`
+	IsRetur          bool   `json:"is_retur"`
+	IsReturToCompany bool   `json:"is_retur_to_company"`
+}
+
 type ReturService interface {
 	GetAllRetur() ([]domain.Retur, error)
 	CreateRetur(req ReturRequest) (*domain.Retur, error)
 	BatalkanRetur(id uint) (*domain.Retur, error)
 	KirimKeDistributor(id uint) (*domain.Retur, error)
 	SelesaikanRetur(id uint) (*domain.Retur, error)
+	CreateDirectRetur(req DirectReturRequest) (*domain.Retur, error)
 }
 
 type returService struct {
@@ -55,7 +66,8 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 
 		// 3. Siapkan & Simpan data Retur baru
 		returData = domain.Retur{
-			SalesID:          req.SalesID,
+			SalesID:          &req.SalesID,
+			ProductID:        &sale.ProductID,
 			Reason:           req.Reason,
 			Status:           req.Status,
 			IsRetur:          req.IsRetur,
@@ -98,10 +110,76 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 	return &returData, nil
 }
 
+func (s *returService) CreateDirectRetur(req DirectReturRequest) (*domain.Retur, error) {
+	if req.ProductID == 0 {
+		return nil, errors.New("product_id tidak boleh kosong")
+	}
+
+	if req.QtyRetur <= 0 {
+		return nil, errors.New("jumlah qty retur harus lebih dari 0")
+	}
+
+	var returData domain.Retur
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 1. Cek keberadaan produk & stok saat ini
+		var product domain.Product
+		if err := tx.First(&product, req.ProductID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errors.New("data produk tidak ditemukan")
+			}
+			return err
+		}
+
+		// 2. Validasi stok toko mencukupi untuk dikirim ke pabrik
+		if product.Saldo < float64(req.QtyRetur) {
+			return fmt.Errorf("stok %s tidak mencukupi untuk diretur (sisa stok: %.0f)", product.Nama, product.Saldo)
+		}
+
+		// 3. Simpan data retur (Status langsung ke distributor)
+		returData = domain.Retur{
+			SalesID:          nil,
+			ProductID:        &req.ProductID,
+			Reason:           req.Reason,
+			Status:           "Retur ke Distributor",
+			IsRetur:          true,
+			IsReturToCompany: true,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		}
+
+		if err := tx.Create(&returData).Error; err != nil {
+			return errors.New("gagal menyimpan data retur")
+		}
+
+		// 4. POTONG STOK TOKO karena barang fisik keluar dikirim ke pabrik
+		err := tx.Model(&domain.Product{}).
+			Where("id = ?", req.ProductID).
+			Update("saldo", gorm.Expr("saldo - ?", req.QtyRetur)).Error
+		if err != nil {
+			return errors.New("gagal memotong stok produk")
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &returData, nil
+}
+
 func (s *returService) GetAllRetur() ([]domain.Retur, error) {
-	var listRetur []domain.Retur
-	err := s.db.Preload("Sales").Preload("Sales.Product").Order("id desc").Find(&listRetur).Error
-	return listRetur, err
+	var results []domain.Retur
+
+	err := s.db.
+		Preload("Product").
+		Preload("Sales.Product").
+		Order("created_at desc, id desc").
+		Find(&results).Error
+
+	return results, err
 }
 
 // 1. BATALKAN RETUR: Sales Qty bertambah lagi, Stok Toko berkurang lagi (karena barang ditarik balik oleh konsumen)
