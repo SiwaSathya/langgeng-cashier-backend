@@ -2,6 +2,7 @@ package main
 
 import (
 	"backend-cashier/domain"
+	"backend-cashier/service"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -215,8 +216,39 @@ func parseExcelNumber(val interface{}) float64 {
 	}
 }
 
+// Struct representasi data dari idealife.json
+type IdealifeJSON struct {
+	Kode     string `json:"kode"`
+	Nama     string `json:"nama"`
+	Category string `json:"category"`
+	Number   string `json:"number"`
+	Supplier string `json:"supplier"`
+	HBeli    string `json:"h_beli"`
+	HPokok   string `json:"h_pokok"`
+	HJual    string `json:"h_jual"`
+}
+
+// Helper untuk membersihkan string harga ("164.000" / "1.150.000" / "") menjadi float64
+func parsePriceString(val string) float64 {
+	val = strings.TrimSpace(val)
+	if val == "" || val == "-" {
+		return 0
+	}
+
+	// Hapus tanda titik pemisah ribuan
+	clean := strings.ReplaceAll(val, ".", "")
+	// Ganti koma ke titik desimal jika ada
+	clean = strings.ReplaceAll(clean, ",", ".")
+
+	res, err := strconv.ParseFloat(clean, 64)
+	if err != nil {
+		return 0
+	}
+	return res
+}
+
 func main() {
-	importType := flag.String("type", "", "Tipe import: stock, rekap, pembelian, json")
+	importType := flag.String("type", "", "Tipe command: stock, rekap, pembelian, json, idealife, sync-accounting")
 	flag.Parse()
 
 	_ = godotenv.Load()
@@ -242,17 +274,124 @@ func main() {
 	case "pembelian":
 		importPurchaseAndExpense(db, "pbl.xlsx")
 	case "json":
-
 		importProductJSON(
 			db,
 			"POLYTRON.json",
 		)
-
+	case "idealife":
+		importIdealifeJSON(db, "idealife.json")
+	case "sync-accounting", "sync":
+		accountingSvc := service.NewAccountingService(db)
+		fmt.Println("Membersihkan data akuntansi lama dan memulai sinkronisasi ulang...")
+		summary, err := accountingSvc.SyncAllAccounting(db)
+		if err != nil {
+			log.Fatalf("[ERROR] Gagal sinkronisasi akuntansi: %v", err)
+		}
+		fmt.Println("==================================================")
+		fmt.Println("      RINGKASAN SINKRONISASI AKUNTANSI            ")
+		fmt.Println("==================================================")
+		fmt.Printf("• Data Jurnal Lama Dibersihkan     : %d jurnal (%d item)\n", summary.DeletedJournals, summary.DeletedItems)
+		fmt.Printf("• Data Piutang Lama Dibersihkan    : %d piutang\n", summary.DeletedPiutang)
+		fmt.Printf("• Akun Standar Dibuat / Dipastikan : %d akun\n", summary.AccountsCreated)
+		fmt.Printf("• Jurnal Penjualan Dibuat (Sales)  : %d transaksi\n", summary.SalesSynced)
+		fmt.Printf("• Jurnal Pembelian Dibuat (Nota)   : %d nota\n", summary.PurchasesSynced)
+		fmt.Printf("• Jurnal Biaya Operasional Dibuat  : %d pengeluaran\n", summary.ExpensesSynced)
+		fmt.Printf("• Piutang Dagang Dibuat (Bon/DP)   : %d pelanggan\n", summary.PiutangSynced)
+		fmt.Printf("• Total Entri Jurnal Baru Tercipta : %d jurnal\n", summary.TotalNewJournals)
+		fmt.Println("==================================================")
 	default:
-		fmt.Println("Silakan gunakan flag -type untuk memilih:")
-		fmt.Println("  go run main.go -type=stock")
-		fmt.Println("  go run main.go -type=rekap")
+		fmt.Println("Silakan gunakan flag -type untuk memilih perintah:")
+		fmt.Println("  go run cmd/main.go -type=sync-accounting (Sinkronisasi Seluruh Akuntansi)")
+		fmt.Println("  go run cmd/main.go -type=stock")
+		fmt.Println("  go run cmd/main.go -type=rekap")
+		fmt.Println("  go run cmd/main.go -type=pembelian")
 	}
+}
+
+func importIdealifeJSON(db *gorm.DB, fileName string) {
+	fmt.Printf("Memulai Import Data Idealife dari %s...\n", fileName)
+
+	file, err := os.ReadFile(fileName)
+	if err != nil {
+		log.Fatalf("Gagal membaca file %s: %v", fileName, err)
+	}
+
+	var items []IdealifeJSON
+	err = json.Unmarshal(file, &items)
+	if err != nil {
+		log.Fatalf("Gagal unmarshal JSON: %v", err)
+	}
+
+	for _, item := range items {
+		kode := strings.TrimSpace(item.Kode)
+		if kode == "" {
+			continue
+		}
+
+		// Gabungkan nama + number (diberi spasi pemisah jika number terisi)
+		namaLengkap := strings.TrimSpace(item.Nama)
+		if strings.TrimSpace(item.Number) != "" {
+			namaLengkap = fmt.Sprintf("%s %s", namaLengkap, strings.TrimSpace(item.Number))
+		}
+
+		// Parse harga string ke float64
+		hBeli := parsePriceString(item.HBeli)
+		hPokok := parsePriceString(item.HPokok)
+		if hPokok == 0 {
+			hPokok = hBeli // Fallback jika h_pokok di JSON kosong
+		}
+		hJual := parsePriceString(item.HJual)
+
+		// =====================
+		// MASTER DATA
+		// =====================
+		category := getOrCreateCategory(db, item.Category)
+		brand := getOrCreateBrand(db, "IDEALIFE")
+		supplier := getOrCreateSupplier(db, item.Supplier)
+
+		// =====================
+		// PRODUCT (INSERT / UPDATE)
+		// =====================
+		var product domain.Product
+		err := db.Where("kode = ?", kode).First(&product).Error
+
+		if err == gorm.ErrRecordNotFound {
+			product = domain.Product{
+				Kode:       kode,
+				Nama:       namaLengkap,
+				Satuan:     "PCS", // Default satuan
+				Saldo:      0,
+				HBeli:      hBeli,
+				HPokok:     hPokok,
+				HJual:      hJual,
+				SupplierID: supplier.ID,
+				CategoryID: category.ID,
+				BrandID:    brand.ID,
+			}
+
+			if err := db.Create(&product).Error; err != nil {
+				fmt.Printf("[ERROR CREATE PRODUCT] %s: %v\n", kode, err)
+			} else {
+				fmt.Printf("[INSERT] %s - %s\n", kode, namaLengkap)
+			}
+		} else if err == nil {
+			product.Nama = namaLengkap
+			product.HBeli = hBeli
+			product.HPokok = hPokok
+			product.HJual = hJual
+			product.SupplierID = supplier.ID
+			product.CategoryID = category.ID
+			product.BrandID = brand.ID
+
+			if err := db.Save(&product).Error; err != nil {
+				fmt.Printf("[ERROR UPDATE PRODUCT] %s: %v\n", kode, err)
+			} else {
+				fmt.Printf("[UPDATE] %s - %s\n", kode, namaLengkap)
+			}
+		}
+	}
+
+	fmt.Println(">>> Import Data Idealife Selesai!")
 }
 
 // Helper untuk mengambil kolom dengan aman tanpa takut index out of range

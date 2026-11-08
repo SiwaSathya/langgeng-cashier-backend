@@ -35,6 +35,8 @@ type CriticalStockItem struct {
 	ProductCode string  `json:"product_code"`
 	Category    string  `json:"category"`
 	Saldo       float64 `json:"saldo"`
+	HBeli       float64 `json:"h_beli"`
+	HJual       float64 `json:"h_jual"`
 	Status      string  `json:"status"` // KOSONG, CRITICAL, AMAN
 }
 
@@ -72,6 +74,7 @@ type SWOTItem struct {
 
 type AnalyticsReportResponse struct {
 	Period           string                 `json:"period"`
+	Location         string                 `json:"location,omitempty"`
 	KPI              AnalyticsKPISummary    `json:"kpi"`
 	Trends           []DailyTrendItem       `json:"trends"`
 	PaymentMethods   []PaymentMethodShare   `json:"payment_methods"`

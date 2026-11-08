@@ -4,6 +4,7 @@ import (
 	"backend-cashier/domain"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -290,7 +291,7 @@ func (s *TransactionService) CreateExpenditure(nota, kode, nama string, qty, har
 			return err
 		}
 		if s.AccountingSvc != nil {
-			s.AccountingSvc.AutoPostExpenseJournal(tx, nota, nama, "", total, time.Now())
+			s.AccountingSvc.AutoPostExpenseJournal(tx, nota, nama, "", expense.Location, total, time.Now())
 		}
 		return nil
 	})
@@ -367,24 +368,83 @@ func GroupSalesByInvoice(sales []domain.Sales) []domain.SalesTransactionGroup {
 	return groups
 }
 
-func (s *TransactionService) GetAllSales(f domain.SalesFilter) ([]domain.SalesTransactionGroup, error) {
-	var results []domain.Sales
-	query := s.DB.Preload("Product").
-		Preload("Customer").
-		Preload("User").
-		Preload("PaymentMethods").
-		Where("is_returs = ?", false)
+// applySalesFilters menerapkan filter query untuk transaksi penjualan
+func applySalesFilters(query *gorm.DB, f domain.SalesFilter) *gorm.DB {
+	query = query.Where("is_returs = ?", false)
 
+	// 1. Filter Rentang Tanggal
 	if f.StartDate != "" && f.EndDate != "" {
 		query = query.Where("created_at BETWEEN ? AND ?", f.StartDate+" 00:00:00", f.EndDate+" 23:59:59")
-	}
-	if f.Member != "" {
-		query = query.Where("member_name LIKE ?", "%"+f.Member+"%")
-	}
-	if f.Method != "" {
-		query = query.Where("payment_method = ?", f.Method)
+	} else if f.StartDate != "" {
+		query = query.Where("created_at >= ?", f.StartDate+" 00:00:00")
+	} else if f.EndDate != "" {
+		query = query.Where("created_at <= ?", f.EndDate+" 23:59:59")
 	}
 
+	// 2. Filter No. Invoice
+	if f.Invoice != "" {
+		query = query.Where("LOWER(invoice) LIKE ?", "%"+strings.ToLower(strings.TrimSpace(f.Invoice))+"%")
+	}
+
+	// 3. Filter Nama Pelanggan / Member
+	if f.Member != "" {
+		query = query.Where("LOWER(member_name) LIKE ?", "%"+strings.ToLower(strings.TrimSpace(f.Member))+"%")
+	}
+
+	// 4. Filter Metode Pembayaran
+	if f.Method != "" {
+		m := strings.TrimSpace(f.Method)
+		if strings.EqualFold(m, "Tunai") || strings.EqualFold(m, "Bayar Tunai") {
+			query = query.Where("LOWER(payment_method) LIKE ?", "%tunai%")
+		} else if strings.EqualFold(m, "Bon") || strings.EqualFold(m, "Bon / Utang") {
+			query = query.Where("is_bon = ? OR LOWER(payment_method) LIKE ?", true, "%bon%")
+		} else {
+			query = query.Where("LOWER(payment_method) = ?", strings.ToLower(m))
+		}
+	}
+
+	// 5. Filter Status Pembayaran (Lunas, Belum Lunas / Bon, DP)
+	if f.Status != "" {
+		st := strings.ToLower(strings.TrimSpace(f.Status))
+		switch st {
+		case "lunas":
+			query = query.Where("status = ? AND is_bon = ? AND is_dp = ?", "Lunas", false, false)
+		case "belum lunas", "bon", "piutang":
+			query = query.Where("status = ? OR is_bon = ?", "Belum Lunas", true)
+		case "dp":
+			query = query.Where("is_dp = ?", true)
+		}
+	}
+
+	// 6. Filter Shift Kerja Kasir
+	if f.Shift > 0 {
+		query = query.Where("shift = ?", f.Shift)
+	}
+
+	// 7. Filter Kasir Tertentu
+	if f.Kasir != "" {
+		kasirPattern := "%" + strings.ToLower(strings.TrimSpace(f.Kasir)) + "%"
+		query = query.Where("user_id = ? OR user_id IN (SELECT id FROM users WHERE LOWER(name) LIKE ?)", f.Kasir, kasirPattern)
+	}
+
+	// 8. Filter Produk Tertentu (Nama atau Kode Produk)
+	if f.ProductSearch != "" {
+		prodPattern := "%" + strings.ToLower(strings.TrimSpace(f.ProductSearch)) + "%"
+		query = query.Where("product_id IN (SELECT id FROM products WHERE LOWER(nama) LIKE ? OR LOWER(kode) LIKE ?)", prodPattern, prodPattern)
+	}
+
+	// 9. Pencarian Global / Cepat (Multi-field: Invoice, Member, Kasir, Produk)
+	if f.Search != "" {
+		searchPattern := "%" + strings.ToLower(strings.TrimSpace(f.Search)) + "%"
+		query = query.Where(`(
+			LOWER(invoice) LIKE ? 
+			OR LOWER(member_name) LIKE ? 
+			OR user_id IN (SELECT id FROM users WHERE LOWER(name) LIKE ?)
+			OR product_id IN (SELECT id FROM products WHERE LOWER(nama) LIKE ? OR LOWER(kode) LIKE ?)
+		)`, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+	}
+
+	// 10. Filter Lokasi Toko Cabang
 	uLoc := strings.TrimSpace(f.UserLocation)
 	if uLoc != "" && !strings.EqualFold(uLoc, "Toko Utama") && !strings.EqualFold(uLoc, "Pusat") {
 		query = query.Where("location = ? OR location = ''", uLoc)
@@ -393,6 +453,100 @@ func (s *TransactionService) GetAllSales(f domain.SalesFilter) ([]domain.SalesTr
 			query = query.Where("location = ?", f.Location)
 		}
 	}
+
+	return query
+}
+
+// GetPaginatedSales mengambil transaksi penjualan terkelompok per-nota secara terpaginasi (hemat memori & cepat)
+func (s *TransactionService) GetPaginatedSales(f domain.SalesFilter) ([]domain.SalesTransactionGroup, int64, error) {
+	page := f.Page
+	if page < 1 {
+		page = 1
+	}
+	limit := f.Limit
+	if limit < 1 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	var totalInvoices int64
+	countQuery := s.DB.Model(&domain.Sales{})
+	countQuery = applySalesFilters(countQuery, f)
+	if err := countQuery.Select("COUNT(DISTINCT invoice)").Scan(&totalInvoices).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if totalInvoices == 0 {
+		return []domain.SalesTransactionGroup{}, 0, nil
+	}
+
+	type invoiceRow struct {
+		Invoice string    `gorm:"column:invoice"`
+		MaxDate time.Time `gorm:"column:max_date"`
+		MaxID   uint      `gorm:"column:max_id"`
+	}
+
+	var rows []invoiceRow
+	invoiceQuery := s.DB.Model(&domain.Sales{})
+	invoiceQuery = applySalesFilters(invoiceQuery, f)
+	err := invoiceQuery.
+		Select("invoice, MAX(created_at) as max_date, MAX(id) as max_id").
+		Group("invoice").
+		Order("MAX(created_at) desc, MAX(id) desc").
+		Limit(limit).
+		Offset(offset).
+		Scan(&rows).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if len(rows) == 0 {
+		return []domain.SalesTransactionGroup{}, totalInvoices, nil
+	}
+
+	var invoices []string
+	invoiceOrderMap := make(map[string]int)
+	for i, r := range rows {
+		invoices = append(invoices, r.Invoice)
+		invoiceOrderMap[r.Invoice] = i
+	}
+
+	var sales []domain.Sales
+	err = s.DB.Preload("Product").
+		Preload("Customer").
+		Preload("User").
+		Preload("PaymentMethods").
+		Where("invoice IN ?", invoices).
+		Where("is_returs = ?", false).
+		Order("created_at desc, id desc").
+		Find(&sales).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	groups := GroupSalesByInvoice(sales)
+	sort.SliceStable(groups, func(i, j int) bool {
+		return invoiceOrderMap[groups[i].Invoice] < invoiceOrderMap[groups[j].Invoice]
+	})
+
+	return groups, totalInvoices, nil
+}
+
+func (s *TransactionService) GetAllSales(f domain.SalesFilter) ([]domain.SalesTransactionGroup, error) {
+	if f.Limit > 0 {
+		groups, _, err := s.GetPaginatedSales(f)
+		return groups, err
+	}
+
+	var results []domain.Sales
+	query := s.DB.Preload("Product").
+		Preload("Customer").
+		Preload("User").
+		Preload("PaymentMethods")
+
+	query = applySalesFilters(query, f)
 
 	err := query.Order("created_at desc, id desc").Find(&results).Error
 	if err != nil {

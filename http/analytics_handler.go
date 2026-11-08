@@ -21,7 +21,8 @@ func (h *AnalyticsHandler) RegisterRoutes(app *fiber.App) {
 
 func (h *AnalyticsHandler) GetReport(c *fiber.Ctx) error {
 	period := c.Query("period", "this-month")
-	result, err := h.Service.GetAnalyticsReport(period)
+	location := c.Query("location", "")
+	result, err := h.Service.GetAnalyticsReport(period, location)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": err.Error(),

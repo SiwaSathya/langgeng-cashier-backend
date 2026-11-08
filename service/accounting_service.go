@@ -1,13 +1,16 @@
 package service
 
 import (
-	"backend-cashier/domain"
 	"errors"
 	"fmt"
 	"math"
 	"strings"
 	"time"
 
+	"backend-cashier/domain"
+
+	"github.com/google/uuid"
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
 
@@ -16,153 +19,100 @@ type AccountingService struct {
 }
 
 func NewAccountingService(db *gorm.DB) *AccountingService {
-	svc := &AccountingService{DB: db}
-	svc.SeedDefaultAccounts()
-	return svc
-}
-
-// SeedDefaultAccounts menginisialisasi 34 akun standar sesuai skema file Excel Buku Harian & Buku Besar
-func (s *AccountingService) SeedDefaultAccounts() {
-	var count int64
-	s.DB.Model(&domain.Account{}).Count(&count)
-	if count == 0 {
-		defaultAccounts := []domain.Account{
-			// --- ASSETS (ASET LANCAR & KAS/BANK) ---
-			{Code: "1101", Name: "KAS", Type: "ASSET", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "1102", Name: "BCA", Type: "ASSET", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "1103", Name: "BRI 4560", Type: "ASSET", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "1104", Name: "BRI 5563", Type: "ASSET", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "1105", Name: "BNI 3815", Type: "ASSET", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "1106", Name: "BNI 9442", Type: "ASSET", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "1107", Name: "MANDIRI", Type: "ASSET", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "1108", Name: "PPN MASUKAN", Type: "ASSET", NormalPosition: "DEBET", InitialBalance: 0},
-
-			// --- LIABILITIES (KEWAJIBAN & HUTANG) ---
-			{Code: "2101", Name: "UTANG DAGANG", Type: "LIABILITY", NormalPosition: "KREDIT", InitialBalance: 0},
-			{Code: "2102", Name: "HUTANG BANK BNI 6121", Type: "LIABILITY", NormalPosition: "KREDIT", InitialBalance: 0},
-			{Code: "2103", Name: "PPN KELUARAN", Type: "LIABILITY", NormalPosition: "KREDIT", InitialBalance: 0},
-
-			// --- EQUITY (EKUITAS & MODAL) ---
-			{Code: "3101", Name: "MODAL PEMILIK", Type: "EQUITY", NormalPosition: "KREDIT", InitialBalance: 0},
-			{Code: "3102", Name: "PRIVE", Type: "EQUITY", NormalPosition: "DEBET", InitialBalance: 0},
-
-			// --- REVENUE (PENDAPATAN) ---
-			{Code: "4101", Name: "PENJUALAN", Type: "REVENUE", NormalPosition: "KREDIT", InitialBalance: 0},
-			{Code: "4102", Name: "PENDAPATAN INSENTIF", Type: "REVENUE", NormalPosition: "KREDIT", InitialBalance: 0},
-			{Code: "4103", Name: "JASA GIRO", Type: "REVENUE", NormalPosition: "KREDIT", InitialBalance: 0},
-
-			// --- EXPENSES (HPP & BIAYA OPERASIONAL) ---
-			{Code: "5101", Name: "PEMBELIAN", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "5102", Name: "PEMBELIAN YANG TIDAK DIKREDITKAN", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6101", Name: "GAJI PEGAWAI", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6102", Name: "BIAYA LISTRIK", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6103", Name: "BIAYA ADMINISTRASI BANK", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6104", Name: "BIAYA BAHAN BAKAR", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6105", Name: "BIAYA KONSUMSI", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6106", Name: "BIAYA KEPERLUAN TOKO", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6107", Name: "BIAYA SAMSAT KENDARAAN", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6108", Name: "BIAYA EKSPEDISI", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6109", Name: "BIAYA INTERNET", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6110", Name: "IURAN SAMPAH", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6111", Name: "BIAYA OPERASIONAL KENDARAAN", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6112", Name: "BIAYA TELKOM", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6113", Name: "BIAYA BUNGA", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6114", Name: "BIAYA SUMBANGAN", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6115", Name: "PPH 21", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6116", Name: "PPH PS 23 FINAL", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-			{Code: "6199", Name: "BIAYA LAIN LAIN", Type: "EXPENSE", NormalPosition: "DEBET", InitialBalance: 0},
-		}
-
-		for _, acc := range defaultAccounts {
-			s.DB.FirstOrCreate(&acc, domain.Account{Name: acc.Name})
-		}
-	}
+	return &AccountingService{DB: db}
 }
 
 // -------------------------------------------------------------
-// ACCOUNT CRUD
+// BAGAN AKUN (CHART OF ACCOUNTS)
 // -------------------------------------------------------------
 
 func (s *AccountingService) GetAllAccounts() ([]domain.Account, error) {
 	var accounts []domain.Account
-	if err := s.DB.Order("code asc, name asc").Find(&accounts).Error; err != nil {
-		return nil, err
-	}
-
-	for i := range accounts {
-		var debetSum, kreditSum float64
-		s.DB.Model(&domain.JournalItem{}).Where("account_id = ?", accounts[i].ID).Select("COALESCE(SUM(debet), 0)").Scan(&debetSum)
-		s.DB.Model(&domain.JournalItem{}).Where("account_id = ?", accounts[i].ID).Select("COALESCE(SUM(kredit), 0)").Scan(&kreditSum)
-
-		if accounts[i].NormalPosition == "DEBET" {
-			accounts[i].CurrentBalance = accounts[i].InitialBalance + debetSum - kreditSum
-		} else {
-			accounts[i].CurrentBalance = accounts[i].InitialBalance + kreditSum - debetSum
-		}
-	}
-
-	return accounts, nil
-}
-
-func (s *AccountingService) CreateAccount(acc domain.Account) (*domain.Account, error) {
-	if acc.Name == "" {
-		return nil, errors.New("nama akun wajib diisi")
-	}
-	if acc.Code == "" {
-		acc.Code = fmt.Sprintf("ACC-%d", time.Now().UnixNano()%100000)
-	}
-	if acc.NormalPosition == "" {
-		if acc.Type == "LIABILITY" || acc.Type == "EQUITY" || acc.Type == "REVENUE" {
-			acc.NormalPosition = "KREDIT"
-		} else {
-			acc.NormalPosition = "DEBET"
-		}
-	}
-
-	if err := s.DB.Create(&acc).Error; err != nil {
-		return nil, err
-	}
-	return &acc, nil
+	err := s.DB.Order("code asc").Find(&accounts).Error
+	return accounts, err
 }
 
 func (s *AccountingService) GetAccountByID(id uint) (*domain.Account, error) {
-	var acc domain.Account
-	if err := s.DB.First(&acc, id).Error; err != nil {
+	var account domain.Account
+	if err := s.DB.First(&account, id).Error; err != nil {
 		return nil, errors.New("akun tidak ditemukan")
 	}
-	return &acc, nil
+	return &account, nil
 }
 
-func (s *AccountingService) UpdateAccount(id uint, input domain.Account) (*domain.Account, error) {
-	var acc domain.Account
-	if err := s.DB.First(&acc, id).Error; err != nil {
+func (s *AccountingService) CreateAccount(req domain.AccountRequest) (*domain.Account, error) {
+	if req.Code == "" || req.Name == "" {
+		return nil, errors.New("kode dan nama akun wajib diisi")
+	}
+
+	var existing domain.Account
+	if err := s.DB.Where("code = ?", req.Code).First(&existing).Error; err == nil {
+		return nil, fmt.Errorf("kode akun '%s' sudah terdaftar", req.Code)
+	}
+
+	accountType := strings.ToUpper(req.Type)
+	normalPos := strings.ToUpper(req.NormalPosition)
+	if normalPos == "" {
+		if accountType == "ASSET" || accountType == "EXPENSE" {
+			normalPos = "DEBET"
+		} else {
+			normalPos = "KREDIT"
+		}
+	}
+
+	account := domain.Account{
+		Code:           req.Code,
+		Name:           req.Name,
+		Type:           accountType,
+		NormalPosition: normalPos,
+		InitialBalance: req.InitialBalance,
+		Description:    req.Description,
+	}
+
+	if err := s.DB.Create(&account).Error; err != nil {
+		return nil, err
+	}
+	return &account, nil
+}
+
+func (s *AccountingService) UpdateAccount(id uint, req domain.AccountRequest) (*domain.Account, error) {
+	var account domain.Account
+	if err := s.DB.First(&account, id).Error; err != nil {
 		return nil, errors.New("akun tidak ditemukan")
 	}
 
-	updates := map[string]interface{}{}
-	if input.Name != "" {
-		updates["name"] = input.Name
+	if req.Code != "" && req.Code != account.Code {
+		var existing domain.Account
+		if err := s.DB.Where("code = ? AND id != ?", req.Code, id).First(&existing).Error; err == nil {
+			return nil, fmt.Errorf("kode akun '%s' sudah digunakan oleh akun lain", req.Code)
+		}
+		account.Code = req.Code
 	}
-	if input.Code != "" {
-		updates["code"] = input.Code
-	}
-	if input.Type != "" {
-		updates["type"] = input.Type
-	}
-	if input.NormalPosition != "" {
-		updates["normal_position"] = input.NormalPosition
-	}
-	updates["initial_balance"] = input.InitialBalance
 
-	if err := s.DB.Model(&acc).Updates(updates).Error; err != nil {
+	if req.Name != "" {
+		account.Name = req.Name
+	}
+	if req.Type != "" {
+		account.Type = strings.ToUpper(req.Type)
+	}
+	if req.NormalPosition != "" {
+		account.NormalPosition = strings.ToUpper(req.NormalPosition)
+	}
+	account.InitialBalance = req.InitialBalance
+	account.Description = req.Description
+
+	if err := s.DB.Save(&account).Error; err != nil {
 		return nil, err
 	}
-
-	s.DB.First(&acc, id)
-	return &acc, nil
+	return &account, nil
 }
 
 func (s *AccountingService) DeleteAccount(id uint) error {
+	var account domain.Account
+	if err := s.DB.First(&account, id).Error; err != nil {
+		return errors.New("akun tidak ditemukan")
+	}
+
 	var count int64
 	s.DB.Model(&domain.JournalItem{}).Where("account_id = ?", id).Count(&count)
 	if count > 0 {
@@ -193,7 +143,8 @@ func (s *AccountingService) CreateJournalEntry(req domain.CreateJournalRequest) 
 		entryDate = time.Now()
 	}
 
-	entryNumber := fmt.Sprintf("JV-%s-%03d", entryDate.Format("20060102"), time.Now().UnixNano()%1000)
+	uuidPart := strings.ReplaceAll(uuid.New().String(), "-", "")[:8]
+	entryNumber := fmt.Sprintf("JV-%s-%s", entryDate.Format("20060102"), strings.ToUpper(uuidPart))
 
 	var totalDebet, totalKredit float64
 	var journalItems []domain.JournalItem
@@ -232,9 +183,14 @@ func (s *AccountingService) CreateJournalEntry(req domain.CreateJournalRequest) 
 		})
 	}
 
-	diff := totalDebet - totalKredit
-	if diff < -0.01 || diff > 0.01 {
-		return nil, fmt.Errorf("jurnal tidak seimbang! Total Debet (IDR %.2f) != Total Kredit (IDR %.2f), Selisih: IDR %.2f", totalDebet, totalKredit, diff)
+	diff := math.Abs(totalDebet - totalKredit)
+	if diff > 0.01 {
+		return nil, fmt.Errorf("jurnal tidak balance: total debet (%.2f) != total kredit (%.2f)", totalDebet, totalKredit)
+	}
+
+	location := strings.TrimSpace(req.Location)
+	if location == "" {
+		location = "Toko Utama"
 	}
 
 	entry := domain.JournalEntry{
@@ -242,13 +198,11 @@ func (s *AccountingService) CreateJournalEntry(req domain.CreateJournalRequest) 
 		Date:        entryDate,
 		Description: req.Description,
 		Reference:   req.Reference,
+		Location:    location,
 		Items:       journalItems,
 	}
 
-	err = s.DB.Transaction(func(tx *gorm.DB) error {
-		return tx.Create(&entry).Error
-	})
-	if err != nil {
+	if err := s.DB.Create(&entry).Error; err != nil {
 		return nil, err
 	}
 
@@ -258,7 +212,7 @@ func (s *AccountingService) CreateJournalEntry(req domain.CreateJournalRequest) 
 
 func (s *AccountingService) UpdateJournalEntry(id uint, req domain.CreateJournalRequest) (*domain.JournalEntry, error) {
 	var entry domain.JournalEntry
-	if err := s.DB.Preload("Items").First(&entry, id).Error; err != nil {
+	if err := s.DB.First(&entry, id).Error; err != nil {
 		return nil, errors.New("jurnal transaksi tidak ditemukan")
 	}
 
@@ -266,26 +220,24 @@ func (s *AccountingService) UpdateJournalEntry(id uint, req domain.CreateJournal
 		return nil, errors.New("jurnal harus memiliki minimal 2 baris (Debet dan Kredit)")
 	}
 
-	var entryDate time.Time
-	var err error
-	if req.Date != "" {
-		entryDate, err = time.Parse("2006-01-02", req.Date)
-		if err != nil {
-			entryDate, _ = time.Parse(time.RFC3339, req.Date)
-		}
-	}
-	if entryDate.IsZero() {
-		entryDate = entry.Date
-	}
-
 	var totalDebet, totalKredit float64
-	var newItems []domain.JournalItem
+	var journalItems []domain.JournalItem
 
 	for _, itemReq := range req.Items {
 		var accountID = itemReq.AccountID
 		if accountID == 0 && itemReq.AccountName != "" {
 			var acc domain.Account
-			if err := s.DB.Where("LOWER(name) = ?", strings.ToLower(itemReq.AccountName)).First(&acc).Error; err == nil {
+			err := s.DB.Where("LOWER(name) = ?", strings.ToLower(itemReq.AccountName)).First(&acc).Error
+			if err == nil {
+				accountID = acc.ID
+			} else {
+				acc = domain.Account{
+					Code:           fmt.Sprintf("ACC-%d", time.Now().UnixNano()%10000),
+					Name:           itemReq.AccountName,
+					Type:           "EXPENSE",
+					NormalPosition: "DEBET",
+				}
+				s.DB.Create(&acc)
 				accountID = acc.ID
 			}
 		}
@@ -297,7 +249,7 @@ func (s *AccountingService) UpdateJournalEntry(id uint, req domain.CreateJournal
 		totalDebet += itemReq.Debet
 		totalKredit += itemReq.Kredit
 
-		newItems = append(newItems, domain.JournalItem{
+		journalItems = append(journalItems, domain.JournalItem{
 			JournalEntryID: entry.ID,
 			AccountID:      accountID,
 			Description:    itemReq.Description,
@@ -306,27 +258,46 @@ func (s *AccountingService) UpdateJournalEntry(id uint, req domain.CreateJournal
 		})
 	}
 
-	diff := totalDebet - totalKredit
-	if diff < -0.01 || diff > 0.01 {
-		return nil, fmt.Errorf("jurnal tidak seimbang! Total Debet (IDR %.2f) != Total Kredit (IDR %.2f), Selisih: IDR %.2f", totalDebet, totalKredit, diff)
+	diff := math.Abs(totalDebet - totalKredit)
+	if diff > 0.01 {
+		return nil, fmt.Errorf("jurnal tidak balance: total debet (%.2f) != total kredit (%.2f)", totalDebet, totalKredit)
 	}
 
-	err = s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&entry).Updates(map[string]interface{}{
-			"date":        entryDate,
-			"description": req.Description,
-			"reference":   req.Reference,
-		}).Error; err != nil {
+	var entryDate time.Time
+	if req.Date != "" {
+		if t, err := time.Parse("2006-01-02", req.Date); err == nil {
+			entryDate = t
+		} else if t, err := time.Parse(time.RFC3339, req.Date); err == nil {
+			entryDate = t
+		}
+	}
+	if !entryDate.IsZero() {
+		entry.Date = entryDate
+	}
+
+	if req.Description != "" {
+		entry.Description = req.Description
+	}
+	if req.Reference != "" {
+		entry.Reference = req.Reference
+	}
+	if req.Location != "" {
+		entry.Location = req.Location
+	}
+
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&entry).Error; err != nil {
 			return err
 		}
-
 		if err := tx.Where("journal_entry_id = ?", entry.ID).Delete(&domain.JournalItem{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Create(&newItems).Error; err != nil {
-			return err
+		for i := range journalItems {
+			journalItems[i].JournalEntryID = entry.ID
+			if err := tx.Create(&journalItems[i]).Error; err != nil {
+				return err
+			}
 		}
-
 		return nil
 	})
 
@@ -342,14 +313,37 @@ func (s *AccountingService) GetAllJournalEntries(f domain.JournalFilter) ([]doma
 	var entries []domain.JournalEntry
 	var total int64
 
+	if f.Month > 0 && f.Year > 0 && (f.StartDate == "" || f.EndDate == "") {
+		firstDay := time.Date(f.Year, time.Month(f.Month), 1, 0, 0, 0, 0, time.Local)
+		lastDay := firstDay.AddDate(0, 1, -1)
+		f.StartDate = firstDay.Format("2006-01-02")
+		f.EndDate = lastDay.Format("2006-01-02")
+	} else if f.Year > 0 && (f.StartDate == "" || f.EndDate == "") {
+		f.StartDate = fmt.Sprintf("%04d-01-01", f.Year)
+		f.EndDate = fmt.Sprintf("%04d-12-31", f.Year)
+	}
+
 	query := s.DB.Model(&domain.JournalEntry{}).Preload("Items.Account")
 
 	if f.StartDate != "" && f.EndDate != "" {
 		query = query.Where("date BETWEEN ? AND ?", f.StartDate+" 00:00:00", f.EndDate+" 23:59:59")
+	} else if f.StartDate != "" {
+		query = query.Where("date >= ?", f.StartDate+" 00:00:00")
+	} else if f.EndDate != "" {
+		query = query.Where("date <= ?", f.EndDate+" 23:59:59")
 	}
+
 	if f.Search != "" {
 		pattern := "%" + strings.ToLower(f.Search) + "%"
 		query = query.Where("LOWER(description) LIKE ? OR LOWER(reference) LIKE ? OR LOWER(entry_number) LIKE ?", pattern, pattern, pattern)
+	}
+	if f.Location != "" && !strings.EqualFold(f.Location, "Semua Toko") {
+		query = query.Where("location = ?", f.Location)
+	}
+	if strings.EqualFold(f.Status, "checked") {
+		query = query.Where("is_checked = true")
+	} else if strings.EqualFold(f.Status, "unchecked") {
+		query = query.Where("is_checked = false")
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -370,6 +364,129 @@ func (s *AccountingService) GetAllJournalEntries(f domain.JournalFilter) ([]doma
 	return entries, total, err
 }
 
+// ExportJournalsExcel mengekspor data Buku Harian ke file Excel (.xlsx) sesuai filter periode (hari/bulan/tahun), lokasi toko, dan status cek
+func (s *AccountingService) ExportJournalsExcel(f domain.JournalFilter) ([]byte, error) {
+	if f.Month > 0 && f.Year > 0 && (f.StartDate == "" || f.EndDate == "") {
+		firstDay := time.Date(f.Year, time.Month(f.Month), 1, 0, 0, 0, 0, time.Local)
+		lastDay := firstDay.AddDate(0, 1, -1)
+		f.StartDate = firstDay.Format("2006-01-02")
+		f.EndDate = lastDay.Format("2006-01-02")
+	} else if f.Year > 0 && (f.StartDate == "" || f.EndDate == "") {
+		f.StartDate = fmt.Sprintf("%04d-01-01", f.Year)
+		f.EndDate = fmt.Sprintf("%04d-12-31", f.Year)
+	}
+
+	query := s.DB.Model(&domain.JournalEntry{}).Preload("Items.Account")
+
+	if f.StartDate != "" && f.EndDate != "" {
+		query = query.Where("date BETWEEN ? AND ?", f.StartDate+" 00:00:00", f.EndDate+" 23:59:59")
+	} else if f.StartDate != "" {
+		query = query.Where("date >= ?", f.StartDate+" 00:00:00")
+	} else if f.EndDate != "" {
+		query = query.Where("date <= ?", f.EndDate+" 23:59:59")
+	}
+
+	if f.Search != "" {
+		pattern := "%" + strings.ToLower(f.Search) + "%"
+		query = query.Where("LOWER(description) LIKE ? OR LOWER(reference) LIKE ? OR LOWER(entry_number) LIKE ?", pattern, pattern, pattern)
+	}
+	if f.Location != "" && !strings.EqualFold(f.Location, "Semua Toko") {
+		query = query.Where("location = ?", f.Location)
+	}
+	if strings.EqualFold(f.Status, "checked") {
+		query = query.Where("is_checked = true")
+	} else if strings.EqualFold(f.Status, "unchecked") {
+		query = query.Where("is_checked = false")
+	}
+
+	var entries []domain.JournalEntry
+	if err := query.Order("date asc, id asc").Find(&entries).Error; err != nil {
+		return nil, err
+	}
+
+	fExcel := excelize.NewFile()
+	sheetName := "Buku Harian"
+	fExcel.SetSheetName("Sheet1", sheetName)
+
+	locTitle := f.Location
+	if locTitle == "" {
+		locTitle = "Semua Toko"
+	}
+	periodeStr := "Semua Periode"
+	if f.StartDate != "" && f.EndDate != "" {
+		periodeStr = fmt.Sprintf("%s s/d %s", f.StartDate, f.EndDate)
+	} else if f.StartDate != "" {
+		periodeStr = fmt.Sprintf("Mulai %s", f.StartDate)
+	} else if f.EndDate != "" {
+		periodeStr = fmt.Sprintf("Hingga %s", f.EndDate)
+	}
+
+	fExcel.SetCellValue(sheetName, "A1", "LAPORAN BUKU HARIAN (JURNAL UMUM)")
+	fExcel.SetCellValue(sheetName, "A2", fmt.Sprintf("Toko: %s | Periode: %s | Total Transaksi: %d", locTitle, periodeStr, len(entries)))
+
+	headers := []string{"No", "Tanggal", "No. Bukti", "Ref / Bukti", "Toko", "Kode Akun", "Nama Akun", "Keterangan", "Debet (Rp)", "Kredit (Rp)", "Markpoint"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 4)
+		fExcel.SetCellValue(sheetName, cell, h)
+	}
+
+	row := 5
+	var totalDebet, totalKredit float64
+	entryCounter := 1
+
+	for _, entry := range entries {
+		tglStr := entry.Date.Format("2006-01-02")
+		checkStr := "Belum Dicek"
+		if entry.IsChecked {
+			checkStr = "Sudah Dicek"
+		}
+
+		for itemIdx, item := range entry.Items {
+			if itemIdx == 0 {
+				fExcel.SetCellValue(sheetName, fmt.Sprintf("A%d", row), entryCounter)
+				fExcel.SetCellValue(sheetName, fmt.Sprintf("B%d", row), tglStr)
+				fExcel.SetCellValue(sheetName, fmt.Sprintf("C%d", row), entry.EntryNumber)
+				fExcel.SetCellValue(sheetName, fmt.Sprintf("D%d", row), entry.Reference)
+				fExcel.SetCellValue(sheetName, fmt.Sprintf("E%d", row), entry.Location)
+				fExcel.SetCellValue(sheetName, fmt.Sprintf("K%d", row), checkStr)
+			}
+
+			accCode := ""
+			accName := ""
+			if item.Account.Code != "" {
+				accCode = item.Account.Code
+				accName = item.Account.Name
+			}
+			desc := item.Description
+			if desc == "" {
+				desc = entry.Description
+			}
+
+			fExcel.SetCellValue(sheetName, fmt.Sprintf("F%d", row), accCode)
+			fExcel.SetCellValue(sheetName, fmt.Sprintf("G%d", row), accName)
+			fExcel.SetCellValue(sheetName, fmt.Sprintf("H%d", row), desc)
+			fExcel.SetCellValue(sheetName, fmt.Sprintf("I%d", row), item.Debet)
+			fExcel.SetCellValue(sheetName, fmt.Sprintf("J%d", row), item.Kredit)
+
+			totalDebet += item.Debet
+			totalKredit += item.Kredit
+			row++
+		}
+		entryCounter++
+	}
+
+	// Baris Total
+	fExcel.SetCellValue(sheetName, fmt.Sprintf("A%d", row), "TOTAL")
+	fExcel.SetCellValue(sheetName, fmt.Sprintf("I%d", row), totalDebet)
+	fExcel.SetCellValue(sheetName, fmt.Sprintf("J%d", row), totalKredit)
+
+	buf, err := fExcel.WriteToBuffer()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 func (s *AccountingService) GetJournalEntryByID(id uint) (*domain.JournalEntry, error) {
 	var entry domain.JournalEntry
 	if err := s.DB.Preload("Items.Account").First(&entry, id).Error; err != nil {
@@ -386,66 +503,75 @@ func (s *AccountingService) DeleteJournalEntry(id uint) error {
 	return s.DB.Select("Items").Delete(&entry).Error
 }
 
+func (s *AccountingService) ToggleCheckJournal(id uint) (*domain.JournalEntry, error) {
+	var entry domain.JournalEntry
+	if err := s.DB.First(&entry, id).Error; err != nil {
+		return nil, errors.New("jurnal transaksi tidak ditemukan")
+	}
+	entry.IsChecked = !entry.IsChecked
+	if err := s.DB.Model(&entry).Update("is_checked", entry.IsChecked).Error; err != nil {
+		return nil, err
+	}
+	s.DB.Preload("Items.Account").First(&entry, id)
+	return &entry, nil
+}
+
 // -------------------------------------------------------------
 // REKAPITULASI BUKU HARIAN
 // -------------------------------------------------------------
 
-func (s *AccountingService) GetRekapitulasi(startDate, endDate string) (*domain.AccountingRecapResponse, error) {
+func (s *AccountingService) GetRekapitulasi(startDate, endDate, location string) (*domain.AccountingRecapResponse, error) {
 	if startDate == "" || endDate == "" {
 		now := time.Now()
-		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
 		endDate = now.Format("2006-01-02")
 	}
 
-	type QueryResult struct {
-		AccountID   uint    `json:"account_id"`
-		AccountCode string  `json:"account_code"`
-		AccountName string  `json:"account_name"`
-		AccountType string  `json:"account_type"`
-		TotalDebet  float64 `json:"total_debet"`
-		TotalKredit float64 `json:"total_kredit"`
-	}
-
-	var rawResults []QueryResult
-	err := s.DB.Table("journal_items").
-		Select("accounts.id as account_id, accounts.code as account_code, accounts.name as account_name, accounts.type as account_type, SUM(journal_items.debet) as total_debet, SUM(journal_items.kredit) as total_kredit").
-		Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
-		Joins("JOIN accounts ON accounts.id = journal_items.account_id").
-		Where("journal_entries.date BETWEEN ? AND ?", startDate+" 00:00:00", endDate+" 23:59:59").
-		Where("journal_entries.deleted_at IS NULL").
-		Group("accounts.id, accounts.code, accounts.name, accounts.type").
-		Order("accounts.code asc, accounts.name asc").
-		Scan(&rawResults).Error
-
-	if err != nil {
+	var accounts []domain.Account
+	if err := s.DB.Order("code asc").Find(&accounts).Error; err != nil {
 		return nil, err
 	}
 
-	var items []domain.AccountingRecapItem
-	var grandTotalDebet, grandTotalKredit float64
+	var recapItems []domain.AccountingRecapItem
+	var grandDebet, grandKredit float64
 
-	for _, r := range rawResults {
-		grandTotalDebet += r.TotalDebet
-		grandTotalKredit += r.TotalKredit
-		items = append(items, domain.AccountingRecapItem{
-			AccountID:   r.AccountID,
-			AccountCode: r.AccountCode,
-			AccountName: r.AccountName,
-			AccountType: r.AccountType,
-			TotalDebet:  r.TotalDebet,
-			TotalKredit: r.TotalKredit,
-		})
+	for _, acc := range accounts {
+		var debet, kredit float64
+
+		q := s.DB.Table("journal_items").
+			Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
+			Where("journal_items.account_id = ? AND journal_entries.date BETWEEN ? AND ?", acc.ID, startDate+" 00:00:00", endDate+" 23:59:59")
+
+		if location != "" && !strings.EqualFold(location, "Semua Toko") {
+			q = q.Where("journal_entries.location = ?", location)
+		}
+
+		q.Select("COALESCE(SUM(journal_items.debet), 0), COALESCE(SUM(journal_items.kredit), 0)").
+			Row().Scan(&debet, &kredit)
+
+		if debet > 0 || kredit > 0 {
+			recapItems = append(recapItems, domain.AccountingRecapItem{
+				AccountID:   acc.ID,
+				AccountCode: acc.Code,
+				AccountName: acc.Name,
+				AccountType: acc.Type,
+				TotalDebet:  debet,
+				TotalKredit: kredit,
+			})
+			grandDebet += debet
+			grandKredit += kredit
+		}
 	}
 
-	diff := grandTotalDebet - grandTotalKredit
-	isBalanced := diff > -0.01 && diff < 0.01
+	diff := grandDebet - grandKredit
+	isBalanced := diff >= -0.01 && diff <= 0.01
 
 	return &domain.AccountingRecapResponse{
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Items:       items,
-		TotalDebet:  grandTotalDebet,
-		TotalKredit: grandTotalKredit,
+		Items:       recapItems,
+		TotalDebet:  grandDebet,
+		TotalKredit: grandKredit,
 		Difference:  diff,
 		IsBalanced:  isBalanced,
 	}, nil
@@ -455,103 +581,90 @@ func (s *AccountingService) GetRekapitulasi(startDate, endDate string) (*domain.
 // BUKU BESAR (GENERAL LEDGER)
 // -------------------------------------------------------------
 
-func (s *AccountingService) GetGeneralLedger(startDate, endDate string, accountID uint) ([]domain.LedgerAccountCard, error) {
+func (s *AccountingService) GetGeneralLedger(accountID uint, startDate, endDate, location string) ([]domain.LedgerAccountCard, error) {
 	if startDate == "" || endDate == "" {
 		now := time.Now()
-		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
 		endDate = now.Format("2006-01-02")
 	}
 
-	accountQuery := s.DB.Model(&domain.Account{})
-	if accountID > 0 {
-		accountQuery = accountQuery.Where("id = ?", accountID)
-	}
 	var accounts []domain.Account
-	if err := accountQuery.Order("code asc, name asc").Find(&accounts).Error; err != nil {
-		return nil, err
-	}
-
-	// 1. Batch query Saldo Awal (sebelum startDate) untuk semua akun sekaligus
-	type PrevBalance struct {
-		AccountID  uint    `json:"account_id"`
-		PrevDebet  float64 `json:"prev_debet"`
-		PrevKredit float64 `json:"prev_kredit"`
-	}
-	var prevList []PrevBalance
-	s.DB.Table("journal_items").
-		Select("journal_items.account_id, COALESCE(SUM(journal_items.debet), 0) as prev_debet, COALESCE(SUM(journal_items.kredit), 0) as prev_kredit").
-		Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
-		Where("journal_entries.date < ?", startDate+" 00:00:00").
-		Where("journal_entries.deleted_at IS NULL").
-		Group("journal_items.account_id").
-		Scan(&prevList)
-
-	prevMap := make(map[uint]PrevBalance)
-	for _, p := range prevList {
-		prevMap[p.AccountID] = p
-	}
-
-	// 2. Batch query semua transaksi jurnal pada periode tanggal sekaligus
-	type ItemRow struct {
-		ID          uint      `json:"id"`
-		AccountID   uint      `json:"account_id"`
-		Date        time.Time `json:"date"`
-		EntryNumber string    `json:"entry_number"`
-		Description string    `json:"description"`
-		Reference   string    `json:"reference"`
-		Debet       float64   `json:"debet"`
-		Kredit      float64   `json:"kredit"`
-	}
-	var allRows []ItemRow
-	s.DB.Table("journal_items").
-		Select("journal_items.id, journal_items.account_id, journal_entries.date, journal_entries.entry_number, journal_items.description, journal_entries.reference, journal_items.debet, journal_items.kredit").
-		Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
-		Where("journal_entries.date BETWEEN ? AND ?", startDate+" 00:00:00", endDate+" 23:59:59").
-		Where("journal_entries.deleted_at IS NULL").
-		Order("journal_entries.date asc, journal_entries.id asc").
-		Scan(&allRows)
-
-	rowsMap := make(map[uint][]ItemRow)
-	for _, r := range allRows {
-		rowsMap[r.AccountID] = append(rowsMap[r.AccountID], r)
+	if accountID > 0 {
+		var a domain.Account
+		if err := s.DB.First(&a, accountID).Error; err != nil {
+			return nil, errors.New("akun tidak ditemukan")
+		}
+		accounts = append(accounts, a)
+	} else {
+		if err := s.DB.Order("code asc").Find(&accounts).Error; err != nil {
+			return nil, err
+		}
 	}
 
 	var cards []domain.LedgerAccountCard
 
 	for _, acc := range accounts {
-		prev := prevMap[acc.ID]
-		var initBalance float64
-		if acc.NormalPosition == "DEBET" {
-			initBalance = acc.InitialBalance + prev.PrevDebet - prev.PrevKredit
-		} else {
-			initBalance = acc.InitialBalance + prev.PrevKredit - prev.PrevDebet
+		var priorDebet, priorKredit float64
+		priorQ := s.DB.Table("journal_items").
+			Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
+			Where("journal_items.account_id = ? AND journal_entries.date < ?", acc.ID, startDate+" 00:00:00")
+
+		if location != "" && !strings.EqualFold(location, "Semua Toko") {
+			priorQ = priorQ.Where("journal_entries.location = ?", location)
 		}
 
-		rows := rowsMap[acc.ID]
+		priorQ.Select("COALESCE(SUM(journal_items.debet), 0), COALESCE(SUM(journal_items.kredit), 0)").
+			Row().Scan(&priorDebet, &priorKredit)
+
+		initialBal := acc.InitialBalance
+		if acc.NormalPosition == "DEBET" {
+			initialBal += (priorDebet - priorKredit)
+		} else {
+			initialBal += (priorKredit - priorDebet)
+		}
+
+		type rowResult struct {
+			ID          uint
+			Date        time.Time
+			EntryNumber string
+			Description string
+			Reference   string
+			Debet       float64
+			Kredit      float64
+		}
+		var rows []rowResult
+
+		rowsQ := s.DB.Table("journal_items").
+			Select("journal_items.id, journal_entries.date, journal_entries.entry_number, COALESCE(journal_items.description, journal_entries.description) as description, journal_entries.reference, journal_items.debet, journal_items.kredit").
+			Joins("JOIN journal_entries ON journal_entries.id = journal_items.journal_entry_id").
+			Where("journal_items.account_id = ? AND journal_entries.date BETWEEN ? AND ?", acc.ID, startDate+" 00:00:00", endDate+" 23:59:59")
+
+		if location != "" && !strings.EqualFold(location, "Semua Toko") {
+			rowsQ = rowsQ.Where("journal_entries.location = ?", location)
+		}
+
+		rowsQ.Order("journal_entries.date asc, journal_items.id asc").
+			Scan(&rows)
+
 		var txItems []domain.LedgerTransactionItem
-		currentBal := initBalance
+		currentBal := initialBal
 		var totalDebet, totalKredit float64
 
 		for _, r := range rows {
+			if acc.NormalPosition == "DEBET" {
+				currentBal += (r.Debet - r.Kredit)
+			} else {
+				currentBal += (r.Kredit - r.Debet)
+			}
+
 			totalDebet += r.Debet
 			totalKredit += r.Kredit
-
-			if acc.NormalPosition == "DEBET" {
-				currentBal = currentBal + r.Debet - r.Kredit
-			} else {
-				currentBal = currentBal + r.Kredit - r.Debet
-			}
-
-			desc := r.Description
-			if desc == "" {
-				desc = r.EntryNumber
-			}
 
 			txItems = append(txItems, domain.LedgerTransactionItem{
 				ID:          r.ID,
 				Date:        r.Date,
 				EntryNumber: r.EntryNumber,
-				Description: desc,
+				Description: r.Description,
 				Reference:   r.Reference,
 				Debet:       r.Debet,
 				Kredit:      r.Kredit,
@@ -559,17 +672,21 @@ func (s *AccountingService) GetGeneralLedger(startDate, endDate string, accountI
 			})
 		}
 
+		if len(txItems) == 0 && initialBal == 0 {
+			continue
+		}
+
 		cards = append(cards, domain.LedgerAccountCard{
-			AccountID:      acc.ID,
-			AccountCode:    acc.Code,
-			AccountName:    acc.Name,
-			AccountType:    acc.Type,
-			NormalPosition: acc.NormalPosition,
-			InitialBalance: initBalance,
-			TotalDebet:     totalDebet,
-			TotalKredit:    totalKredit,
-			EndingBalance:  currentBal,
-			Transactions:   txItems,
+			AccountID:       acc.ID,
+			AccountCode:     acc.Code,
+			AccountName:     acc.Name,
+			AccountType:     acc.Type,
+			NormalPosition:  acc.NormalPosition,
+			StartingBalance: initialBal,
+			Transactions:    txItems,
+			TotalDebet:      totalDebet,
+			TotalKredit:     totalKredit,
+			EndingBalance:   currentBal,
 		})
 	}
 
@@ -580,7 +697,7 @@ func (s *AccountingService) GetGeneralLedger(startDate, endDate string, accountI
 // AUTOMATIC JOURNAL POSTING HELPERS (SEAMLESS DOUBLE ENTRY)
 // -------------------------------------------------------------
 
-func (s *AccountingService) AutoPostSalesJournal(tx *gorm.DB, invoice string, paymentMethod string, totalNetto, amountPaid float64, isDp bool, date time.Time) {
+func (s *AccountingService) AutoPostSalesJournal(tx *gorm.DB, invoice string, paymentMethod string, totalNetto, amountPaid float64, isDp bool, date time.Time, location ...string) {
 	if tx == nil {
 		tx = s.DB
 	}
@@ -620,8 +737,6 @@ func (s *AccountingService) AutoPostSalesJournal(tx *gorm.DB, invoice string, pa
 		paid = amountPaid
 	}
 
-	// 4. Perhitungan PPN Keluaran (11%) & DPP Penjualan Dibulatkan:
-	// Contoh Kas 100.000 -> Penjualan (Kas / 1.11) = 90.090, PPN Keluaran = 9.910
 	dppPenjualan := math.Round(paid / 1.11)
 	ppnKeluaran := paid - dppPenjualan
 
@@ -651,24 +766,39 @@ func (s *AccountingService) AutoPostSalesJournal(tx *gorm.DB, invoice string, pa
 		items[1].Kredit = paid
 	}
 
+	loc := "Toko Utama"
+	if len(location) > 0 && strings.TrimSpace(location[0]) != "" {
+		loc = strings.TrimSpace(location[0])
+	}
+
 	entry := domain.JournalEntry{
 		EntryNumber: entryNumber,
 		Date:        date,
 		Description: fmt.Sprintf("PENJUALAN NOTA %s (%s)", invoice, paymentMethod),
 		Reference:   invoice,
+		Location:    loc,
 		Items:       items,
 	}
 
 	_ = tx.Create(&entry).Error
 }
 
-func (s *AccountingService) AutoPostExpenseJournal(tx *gorm.DB, nota, deskripsi, kategori string, total float64, date time.Time) {
+func (s *AccountingService) AutoPostExpenseJournal(tx *gorm.DB, nota, deskripsi, kategori, location string, total float64, date time.Time) error {
 	if tx == nil {
 		tx = s.DB
 	}
 
+	if total <= 0 {
+		return nil
+	}
+
 	var kasAcc domain.Account
-	tx.Where("LOWER(name) = ?", "kas").First(&kasAcc)
+	// Prioritas: kode 1101 atau nama "KAS"
+	if err := tx.Where("code = ? OR LOWER(name) = ?", "1101", "kas").First(&kasAcc).Error; err != nil || kasAcc.ID == 0 {
+		if err := tx.Where("type = ?", "ASSET").First(&kasAcc).Error; err != nil || kasAcc.ID == 0 {
+			return errors.New("akun kas/aset tidak ditemukan di sistem")
+		}
+	}
 
 	expenseAccountName := "BIAYA LAIN LAIN"
 	descUpper := strings.ToUpper(deskripsi + " " + kategori)
@@ -679,7 +809,7 @@ func (s *AccountingService) AutoPostExpenseJournal(tx *gorm.DB, nota, deskripsi,
 		expenseAccountName = "GAJI PEGAWAI"
 	} else if strings.Contains(descUpper, "BBM") || strings.Contains(descUpper, "BAHAN BAKAR") || strings.Contains(descUpper, "BENSIN") {
 		expenseAccountName = "BIAYA BAHAN BAKAR"
-	} else if strings.Contains(descUpper, "KONSUMSI") || strings.Contains(descUpper, "MAKAN") || strings.Contains(descUpper, "MINUM") {
+	} else if strings.Contains(descUpper, "KONSUMSI") || strings.Contains(descUpper, "MAKAN") || strings.Contains(descUpper, "MINUM") || strings.Contains(descUpper, "SATE") || strings.Contains(descUpper, "RUJAK") || strings.Contains(descUpper, "MIXUE") {
 		expenseAccountName = "BIAYA KONSUMSI"
 	} else if strings.Contains(descUpper, "SAMSAT") || strings.Contains(descUpper, "PAJAK KENDARAAN") {
 		expenseAccountName = "BIAYA SAMSAT KENDARAAN"
@@ -700,21 +830,46 @@ func (s *AccountingService) AutoPostExpenseJournal(tx *gorm.DB, nota, deskripsi,
 	}
 
 	var expAcc domain.Account
-	tx.Where("LOWER(name) = ?", strings.ToLower(expenseAccountName)).First(&expAcc)
-	if expAcc.ID == 0 {
-		expAcc = kasAcc
+	if err := tx.Where("LOWER(name) = ?", strings.ToLower(expenseAccountName)).First(&expAcc).Error; err != nil || expAcc.ID == 0 {
+		if err := tx.Where("code = ? OR LOWER(name) = ?", "6199", "biaya lain lain").First(&expAcc).Error; err != nil || expAcc.ID == 0 {
+			expAcc = domain.Account{
+				Code:           "6199",
+				Name:           "BIAYA LAIN LAIN",
+				Type:           "EXPENSE",
+				NormalPosition: "DEBET",
+			}
+			if err := tx.Create(&expAcc).Error; err != nil {
+				tx.Where("code = ?", "6199").First(&expAcc)
+			}
+		}
 	}
 
-	entryNumber := fmt.Sprintf("JV-EXP-%s-%d", nota, time.Now().UnixNano()%1000)
+	cleanNota := strings.TrimSpace(nota)
+	if cleanNota == "" {
+		cleanNota = "EXP"
+	}
+	if location == "" {
+		location = "Toko Utama"
+	}
+
+	uuidPart := strings.ReplaceAll(uuid.New().String(), "-", "")[:8]
+	entryNumber := fmt.Sprintf("JV-EXP-%s-%s", date.Format("20060102"), strings.ToUpper(uuidPart))
+
+	desc := strings.TrimSpace(deskripsi)
+	if desc == "" {
+		desc = kategori
+	}
+
 	entry := domain.JournalEntry{
 		EntryNumber: entryNumber,
 		Date:        date,
-		Description: fmt.Sprintf("BIAYA OPERASIONAL: %s", deskripsi),
-		Reference:   nota,
+		Description: fmt.Sprintf("BIAYA OPERASIONAL: %s", desc),
+		Reference:   cleanNota,
+		Location:    location,
 		Items: []domain.JournalItem{
 			{
 				AccountID:   expAcc.ID,
-				Description: deskripsi,
+				Description: desc,
 				Debet:       total,
 				Kredit:      0,
 			},
@@ -726,10 +881,10 @@ func (s *AccountingService) AutoPostExpenseJournal(tx *gorm.DB, nota, deskripsi,
 			},
 		},
 	}
-	_ = tx.Create(&entry).Error
+	return tx.Create(&entry).Error
 }
 
-func (s *AccountingService) AutoPostPurchaseJournal(tx *gorm.DB, nota string, total float64, date time.Time) {
+func (s *AccountingService) AutoPostPurchaseJournal(tx *gorm.DB, nota string, total float64, date time.Time, location ...string) {
 	if tx == nil {
 		tx = s.DB
 	}
@@ -742,12 +897,25 @@ func (s *AccountingService) AutoPostPurchaseJournal(tx *gorm.DB, nota string, to
 		return
 	}
 
-	entryNumber := fmt.Sprintf("JV-BUY-%s-%d", nota, time.Now().UnixNano()%1000)
+	cleanNota := strings.TrimSpace(nota)
+	if cleanNota == "" {
+		cleanNota = "BUY"
+	}
+
+	loc := "Toko Utama"
+	if len(location) > 0 && strings.TrimSpace(location[0]) != "" {
+		loc = strings.TrimSpace(location[0])
+	}
+
+	uuidPart := strings.ReplaceAll(uuid.New().String(), "-", "")[:8]
+	entryNumber := fmt.Sprintf("JV-BUY-%s-%s", cleanNota, strings.ToUpper(uuidPart))
+
 	entry := domain.JournalEntry{
 		EntryNumber: entryNumber,
 		Date:        date,
 		Description: fmt.Sprintf("PEMBELIAN STOK BARANG NOTA %s", nota),
 		Reference:   nota,
+		Location:    loc,
 		Items: []domain.JournalItem{
 			{
 				AccountID:   buyAcc.ID,
@@ -764,6 +932,45 @@ func (s *AccountingService) AutoPostPurchaseJournal(tx *gorm.DB, nota string, to
 		},
 	}
 	_ = tx.Create(&entry).Error
+}
+
+// SyncMissingExpenseJournals memeriksa tabel expenses dan membuat jurnal buku harian bagi yang belum tercatat
+func (s *AccountingService) SyncMissingExpenseJournals(optionalTx ...*gorm.DB) (int, error) {
+	db := s.DB
+	if len(optionalTx) > 0 && optionalTx[0] != nil {
+		db = optionalTx[0]
+	}
+
+	var expenses []domain.Expense
+	if err := db.Find(&expenses).Error; err != nil {
+		return 0, err
+	}
+
+	syncedCount := 0
+	for _, exp := range expenses {
+		cleanNota := strings.TrimSpace(exp.Nota)
+		if cleanNota == "" {
+			cleanNota = fmt.Sprintf("EXP-%d", exp.ID)
+		}
+
+		var count int64
+		db.Model(&domain.JournalEntry{}).Where("reference = ? OR entry_number LIKE ?", cleanNota, "%"+cleanNota+"%").Count(&count)
+		if count == 0 && exp.Total > 0 {
+			tgl := exp.Tanggal
+			if tgl.IsZero() {
+				tgl = exp.CreatedAt
+			}
+			loc := exp.Location
+			if loc == "" {
+				loc = "Toko Utama"
+			}
+			err := s.AutoPostExpenseJournal(db, cleanNota, exp.Deskripsi, exp.Kategori, loc, exp.Total, tgl)
+			if err == nil {
+				syncedCount++
+			}
+		}
+	}
+	return syncedCount, nil
 }
 
 // -------------------------------------------------------------
@@ -784,7 +991,7 @@ func (s *AccountingService) GetAllPiutang(f domain.PiutangFilter) ([]domain.Piut
 	}
 	if f.Search != "" {
 		pat := "%" + strings.ToLower(f.Search) + "%"
-		query = query.Where("LOWER(customer_name) LIKE ? OR LOWER(sales_invoice) LIKE ? OR LOWER(keterangan) LIKE ?", pat, pat, pat)
+		query = query.Where("LOWER(customer_name) LIKE ? OR LOWER(sales_invoice) LIKE ? OR LOWER(keterangan) LIKE ? OR customer_phone LIKE ?", pat, pat, pat, pat)
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -801,7 +1008,12 @@ func (s *AccountingService) GetAllPiutang(f domain.PiutangFilter) ([]domain.Piut
 	}
 	offset := (page - 1) * limit
 
-	err := query.Order("tanggal desc, id desc").Limit(limit).Offset(offset).Find(&records).Error
+	orderClause := "tanggal desc, id desc"
+	if strings.EqualFold(f.GroupBy, "phone") {
+		orderClause = "customer_phone asc, tanggal asc, id asc"
+	}
+
+	err := query.Order(orderClause).Limit(limit).Offset(offset).Find(&records).Error
 	return records, total, err
 }
 
@@ -848,74 +1060,67 @@ func (s *AccountingService) CreatePiutang(req domain.PiutangDagangRequest) (*dom
 	if err := s.DB.Create(&piutang).Error; err != nil {
 		return nil, err
 	}
-
-	s.DB.Preload("Customer").First(&piutang, piutang.ID)
 	return &piutang, nil
 }
 
-func (s *AccountingService) GetPiutangByID(id uint) (*domain.PiutangDagang, error) {
-	var p domain.PiutangDagang
-	if err := s.DB.Preload("Customer").First(&p, id).Error; err != nil {
-		return nil, errors.New("data piutang tidak ditemukan")
-	}
-	return &p, nil
-}
-
 func (s *AccountingService) UpdatePiutang(id uint, req domain.PiutangDagangRequest) (*domain.PiutangDagang, error) {
-	var p domain.PiutangDagang
-	if err := s.DB.First(&p, id).Error; err != nil {
+	var piutang domain.PiutangDagang
+	if err := s.DB.First(&piutang, id).Error; err != nil {
 		return nil, errors.New("data piutang tidak ditemukan")
 	}
 
-	updates := map[string]interface{}{}
 	if req.CustomerName != "" {
-		updates["customer_name"] = req.CustomerName
+		piutang.CustomerName = req.CustomerName
 	}
 	if req.CustomerPhone != "" {
-		updates["customer_phone"] = req.CustomerPhone
+		piutang.CustomerPhone = req.CustomerPhone
 	}
 	if req.SalesInvoice != "" {
-		updates["sales_invoice"] = req.SalesInvoice
+		piutang.SalesInvoice = req.SalesInvoice
 	}
 	if req.Tanggal != "" {
-		d, err := time.Parse("2006-01-02", req.Tanggal)
-		if err == nil {
-			updates["tanggal"] = d
+		if t, err := time.Parse("2006-01-02", req.Tanggal); err == nil {
+			piutang.Tanggal = t
 		}
 	}
-	updates["saldo_awal"] = req.SaldoAwal
-	updates["debet"] = req.Debet
-	updates["kredit"] = req.Kredit
+	if req.Keterangan != "" {
+		piutang.Keterangan = req.Keterangan
+	}
 
-	saldoAkhir := req.SaldoAwal + req.Debet - req.Kredit
-	updates["saldo_akhir"] = saldoAkhir
+	piutang.SaldoAwal = req.SaldoAwal
+	piutang.Debet = req.Debet
+	piutang.Kredit = req.Kredit
+	piutang.SaldoAkhir = piutang.SaldoAwal + piutang.Debet - piutang.Kredit
 
 	if req.Status != "" {
-		updates["status"] = req.Status
+		piutang.Status = req.Status
 	} else {
-		if saldoAkhir <= 0 {
-			updates["status"] = "Lunas"
+		if piutang.SaldoAkhir <= 0 {
+			piutang.Status = "Lunas"
 		} else {
-			updates["status"] = "Belum Lunas"
+			piutang.Status = "Belum Lunas"
 		}
 	}
-	updates["keterangan"] = req.Keterangan
 
-	if err := s.DB.Model(&p).Updates(updates).Error; err != nil {
+	if err := s.DB.Save(&piutang).Error; err != nil {
 		return nil, err
 	}
-
-	s.DB.Preload("Customer").First(&p, id)
-	return &p, nil
+	return &piutang, nil
 }
 
 func (s *AccountingService) DeletePiutang(id uint) error {
 	return s.DB.Delete(&domain.PiutangDagang{}, id).Error
 }
 
-func (s *AccountingService) AutoRecordSalesPiutang(tx *gorm.DB, customerID *uint, customerName, customerPhone, invoice string, totalNetto, amountPaid float64, date time.Time) {
+func (s *AccountingService) AutoRecordSalesPiutang(tx *gorm.DB, customerID *uint, custName, custPhone, invoice string, totalNetto, amountPaid float64, date time.Time) {
 	if tx == nil {
 		tx = s.DB
+	}
+
+	cleanInv := strings.TrimSpace(invoice)
+	var existing domain.PiutangDagang
+	if err := tx.Where("sales_invoice = ?", cleanInv).First(&existing).Error; err == nil {
+		return
 	}
 
 	sisaPiutang := totalNetto - amountPaid
@@ -924,35 +1129,306 @@ func (s *AccountingService) AutoRecordSalesPiutang(tx *gorm.DB, customerID *uint
 		status = "Lunas"
 	}
 
+	var saldoAwal float64
+	if custPhone != "" {
+		var last domain.PiutangDagang
+		if err := tx.Where("customer_phone = ?", custPhone).Order("tanggal desc, id desc").First(&last).Error; err == nil {
+			saldoAwal = last.SaldoAkhir
+		}
+	}
+
 	p := domain.PiutangDagang{
 		CustomerID:    customerID,
-		CustomerName:  customerName,
-		CustomerPhone: customerPhone,
-		SalesInvoice:  invoice,
+		CustomerName:  custName,
+		CustomerPhone: custPhone,
+		SalesInvoice:  cleanInv,
 		Tanggal:       date,
-		SaldoAwal:     0,
-		Debet:         totalNetto,
-		Kredit:        amountPaid,
-		SaldoAkhir:    sisaPiutang,
-		Keterangan:    fmt.Sprintf("Transaksi DP Nota %s", invoice),
+		SaldoAwal:     saldoAwal,
+		Debet:         sisaPiutang,
+		Kredit:        0,
+		SaldoAkhir:    saldoAwal + sisaPiutang,
+		Keterangan:    fmt.Sprintf("Piutang Penjualan Nota %s", invoice),
 		Status:        status,
 	}
 
 	_ = tx.Create(&p).Error
 }
 
-func (s *AccountingService) AutoSettleSalesPiutang(tx *gorm.DB, invoice string, amountPaid float64) {
+func (s *AccountingService) AutoSettleSalesPiutang(tx *gorm.DB, invoice string, paymentAmount float64) {
 	if tx == nil {
 		tx = s.DB
 	}
 
+	cleanInv := strings.TrimSpace(invoice)
 	var p domain.PiutangDagang
-	if err := tx.Where("sales_invoice = ?", invoice).First(&p).Error; err == nil {
-		tx.Model(&p).Updates(map[string]interface{}{
-			"kredit":      p.Debet,
-			"saldo_akhir": 0,
-			"status":      "Lunas",
-			"keterangan":  p.Keterangan + " [LUNAS]",
-		})
+	if err := tx.Where("sales_invoice = ?", cleanInv).First(&p).Error; err != nil {
+		return
 	}
+
+	p.Kredit += paymentAmount
+	p.SaldoAkhir = p.SaldoAwal + p.Debet - p.Kredit
+	if p.SaldoAkhir <= 0 {
+		p.Status = "Lunas"
+		p.SaldoAkhir = 0
+	}
+
+	_ = tx.Save(&p).Error
+}
+
+// EnsureStandardAccounts memastikan seluruh akun standar akuntansi tersedia di database
+func (s *AccountingService) EnsureStandardAccounts(tx *gorm.DB) (int, error) {
+	if tx == nil {
+		tx = s.DB
+	}
+
+	standardAccounts := []domain.Account{
+		{Code: "1101", Name: "KAS", Type: "ASSET", NormalPosition: "DEBET", Description: "Kas Tunai Toko"},
+		{Code: "1102", Name: "BCA", Type: "ASSET", NormalPosition: "DEBET", Description: "Rekening Bank BCA"},
+		{Code: "1103", Name: "BRI 4560", Type: "ASSET", NormalPosition: "DEBET", Description: "Rekening Bank BRI 4560"},
+		{Code: "1104", Name: "BRI 5563", Type: "ASSET", NormalPosition: "DEBET", Description: "Rekening Bank BRI 5563"},
+		{Code: "1105", Name: "BNI 3815", Type: "ASSET", NormalPosition: "DEBET", Description: "Rekening Bank BNI 3815"},
+		{Code: "1106", Name: "MANDIRI", Type: "ASSET", NormalPosition: "DEBET", Description: "Rekening Bank Mandiri"},
+		{Code: "1107", Name: "PIUTANG DAGANG", Type: "ASSET", NormalPosition: "DEBET", Description: "Piutang Usaha Pelanggan"},
+		{Code: "1108", Name: "PERSEDIAAN BARANG DAGANG", Type: "ASSET", NormalPosition: "DEBET", Description: "Persediaan Stok Produk"},
+		{Code: "2101", Name: "UTANG DAGANG", Type: "LIABILITY", NormalPosition: "KREDIT", Description: "Utang Pembelian Barang ke Supplier"},
+		{Code: "2102", Name: "PPN KELUARAN", Type: "LIABILITY", NormalPosition: "KREDIT", Description: "Pajak Pertambahan Nilai Keluaran 11%"},
+		{Code: "3101", Name: "MODAL PEMILIK", Type: "EQUITY", NormalPosition: "KREDIT", Description: "Modal Pemilik Usaha"},
+		{Code: "4101", Name: "PENJUALAN", Type: "REVENUE", NormalPosition: "KREDIT", Description: "Pendapatan Hasil Penjualan Barang"},
+		{Code: "5101", Name: "HARGA POKOK PENJUALAN", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Harga Pokok Penjualan (HPP)"},
+		{Code: "5102", Name: "PEMBELIAN", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Biaya Pembelian Stok Barang"},
+		{Code: "6101", Name: "GAJI PEGAWAI", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Gaji & Upah Karyawan"},
+		{Code: "6102", Name: "BIAYA LISTRIK", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Listrik PLN"},
+		{Code: "6103", Name: "BIAYA BAHAN BAKAR", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban BBM Operasional"},
+		{Code: "6104", Name: "BIAYA KONSUMSI", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Konsumsi & Makanan Karyawan"},
+		{Code: "6105", Name: "BIAYA EKSPEDISI", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Ongkos Kirim / Ekspedisi"},
+		{Code: "6106", Name: "BIAYA KEPERLUAN TOKO", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Perlengkapan & Operasional Toko"},
+		{Code: "6107", Name: "BIAYA INTERNET", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Internet & WiFi"},
+		{Code: "6108", Name: "BIAYA TELKOM", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Telepon & Pulsa"},
+		{Code: "6109", Name: "IURAN SAMPAH", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Iuran Kebersihan Lingkungan"},
+		{Code: "6110", Name: "BIAYA SAMSAT KENDARAAN", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Pajak & Samsat Kendaraan Operasional"},
+		{Code: "6111", Name: "BIAYA ADMINISTRASI BANK", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Administrasi Bank"},
+		{Code: "6199", Name: "BIAYA LAIN LAIN", Type: "EXPENSE", NormalPosition: "DEBET", Description: "Beban Operasional Lain-lain"},
+	}
+
+	createdCount := 0
+	for _, acc := range standardAccounts {
+		var existing domain.Account
+		err := tx.Where("code = ? OR LOWER(name) = ?", acc.Code, strings.ToLower(acc.Name)).First(&existing).Error
+		if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+			if errCreate := tx.Create(&acc).Error; errCreate == nil {
+				createdCount++
+			}
+		}
+	}
+	return createdCount, nil
+}
+
+// SyncAllAccounting melakukan sinkronisasi ulang secara menyeluruh:
+// 1. Membersihkan (hard delete) seluruh data rincian jurnal, buku harian, dan piutang dagang lama
+// 2. Memastikan seluruh Bagan Akun Standar (COA) tersedia
+// 3. Menyelaraskan seluruh transaksi Penjualan (Sales) ke Buku Harian Jurnal & Piutang Dagang
+// 4. Menyelaraskan seluruh transaksi Pembelian (Purchases) ke Buku Harian Jurnal
+// 5. Menyelaraskan seluruh transaksi Pengeluaran (Expenses) ke Buku Harian Jurnal
+func (s *AccountingService) SyncAllAccounting(tx *gorm.DB) (*domain.SyncAccountingSummary, error) {
+	if tx == nil {
+		tx = s.DB
+	}
+
+	summary := &domain.SyncAccountingSummary{}
+
+	err := tx.Transaction(func(trx *gorm.DB) error {
+		// 1. Hapus seluruh data transaksi akuntansi lama (items, entries, piutang) agar sinkronisasi bersih dari awal
+		var countItems int64
+		trx.Model(&domain.JournalItem{}).Unscoped().Count(&countItems)
+		if err := trx.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Where("1 = 1").Delete(&domain.JournalItem{}).Error; err != nil {
+			return fmt.Errorf("gagal membersihkan rincian jurnal lama: %w", err)
+		}
+		summary.DeletedItems = int(countItems)
+
+		var countJournals int64
+		trx.Model(&domain.JournalEntry{}).Unscoped().Count(&countJournals)
+		if err := trx.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Where("1 = 1").Delete(&domain.JournalEntry{}).Error; err != nil {
+			return fmt.Errorf("gagal membersihkan buku harian jurnal lama: %w", err)
+		}
+		summary.DeletedJournals = int(countJournals)
+
+		var countPiutang int64
+		trx.Model(&domain.PiutangDagang{}).Unscoped().Count(&countPiutang)
+		if err := trx.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Where("1 = 1").Delete(&domain.PiutangDagang{}).Error; err != nil {
+			return fmt.Errorf("gagal membersihkan piutang dagang lama: %w", err)
+		}
+		summary.DeletedPiutang = int(countPiutang)
+
+		// 2. Akun Standar
+		accCreated, err := s.EnsureStandardAccounts(trx)
+		if err != nil {
+			return fmt.Errorf("gagal memastikan akun standar: %w", err)
+		}
+		summary.AccountsCreated = accCreated
+
+		// 3. Sinkronisasi Penjualan (Sales)
+		var allSales []domain.Sales
+		if err := trx.Preload("Customer").Order("created_at asc, id asc").Find(&allSales).Error; err != nil {
+			return fmt.Errorf("gagal mengambil data penjualan: %w", err)
+		}
+
+		type invData struct {
+			Invoice       string
+			PaymentMethod string
+			Location      string
+			TotalNetto    float64
+			AmountPaid    float64
+			IsDp          bool
+			IsBon         bool
+			CustomerID    *uint
+			CustomerName  string
+			CustomerPhone string
+			CreatedAt     time.Time
+		}
+
+		invMap := make(map[string]*invData)
+		var invOrder []string
+
+		for _, item := range allSales {
+			inv := strings.TrimSpace(item.Invoice)
+			if inv == "" {
+				continue
+			}
+
+			if _, exists := invMap[inv]; !exists {
+				custName := item.MemberName
+				custPhone := ""
+				if item.Customer.ID > 0 {
+					custName = item.Customer.Name
+					custPhone = item.Customer.PhoneNumber
+				}
+
+				loc := item.Location
+				if loc == "" {
+					loc = "Toko Utama"
+				}
+
+				invMap[inv] = &invData{
+					Invoice:       inv,
+					PaymentMethod: item.PaymentMethod,
+					Location:      loc,
+					TotalNetto:    0,
+					AmountPaid:    item.AmountPaid,
+					IsDp:          item.IsDp,
+					IsBon:         item.IsBon,
+					CustomerID:    item.CustomerID,
+					CustomerName:  custName,
+					CustomerPhone: custPhone,
+					CreatedAt:     item.CreatedAt,
+				}
+				invOrder = append(invOrder, inv)
+			}
+
+			invMap[inv].TotalNetto += item.TotalNetto
+			if item.AmountPaid > invMap[inv].AmountPaid {
+				invMap[inv].AmountPaid = item.AmountPaid
+			}
+			if item.IsDp {
+				invMap[inv].IsDp = true
+			}
+			if item.IsBon {
+				invMap[inv].IsBon = true
+			}
+		}
+
+		for _, inv := range invOrder {
+			d := invMap[inv]
+			entryNumber := fmt.Sprintf("JV-SALES-%s", d.Invoice)
+
+			var count int64
+			trx.Model(&domain.JournalEntry{}).Where("entry_number = ? OR reference = ?", entryNumber, d.Invoice).Count(&count)
+			if count == 0 && d.TotalNetto > 0 {
+				isCredit := d.IsDp || d.IsBon
+				s.AutoPostSalesJournal(trx, d.Invoice, d.PaymentMethod, d.TotalNetto, d.AmountPaid, isCredit, d.CreatedAt, d.Location)
+				summary.SalesSynced++
+				summary.TotalNewJournals++
+			}
+
+			// Sinkronisasi Piutang jika bon/dp atau amountPaid < totalNetto
+			isPiutang := d.IsDp || d.IsBon || (d.AmountPaid < d.TotalNetto)
+			if isPiutang {
+				var pCount int64
+				trx.Model(&domain.PiutangDagang{}).Where("sales_invoice = ?", d.Invoice).Count(&pCount)
+				if pCount == 0 {
+					s.AutoRecordSalesPiutang(trx, d.CustomerID, d.CustomerName, d.CustomerPhone, d.Invoice, d.TotalNetto, d.AmountPaid, d.CreatedAt)
+					summary.PiutangSynced++
+				}
+			}
+		}
+
+		// 4. Sinkronisasi Pembelian (Purchases)
+		var allPurchases []domain.Purchase
+		if err := trx.Order("tanggal asc, id asc").Find(&allPurchases).Error; err != nil {
+			return fmt.Errorf("gagal mengambil data pembelian: %w", err)
+		}
+
+		type purData struct {
+			Nota     string
+			Location string
+			Total    float64
+			Tanggal  time.Time
+		}
+
+		purMap := make(map[string]*purData)
+		var purOrder []string
+
+		for _, item := range allPurchases {
+			nota := strings.TrimSpace(item.Nota)
+			if nota == "" {
+				continue
+			}
+
+			if _, exists := purMap[nota]; !exists {
+				loc := item.Location
+				if loc == "" {
+					loc = "Toko Utama"
+				}
+				tgl := item.Tanggal
+				if tgl.IsZero() {
+					tgl = item.CreatedAt
+				}
+
+				purMap[nota] = &purData{
+					Nota:     nota,
+					Location: loc,
+					Total:    0,
+					Tanggal:  tgl,
+				}
+				purOrder = append(purOrder, nota)
+			}
+			purMap[nota].Total += item.Total
+		}
+
+		for _, nota := range purOrder {
+			d := purMap[nota]
+			var count int64
+			trx.Model(&domain.JournalEntry{}).Where("reference = ? OR entry_number LIKE ?", d.Nota, "%"+d.Nota+"%").Count(&count)
+			if count == 0 && d.Total > 0 {
+				s.AutoPostPurchaseJournal(trx, d.Nota, d.Total, d.Tanggal, d.Location)
+				summary.PurchasesSynced++
+				summary.TotalNewJournals++
+			}
+		}
+
+		// 5. Sinkronisasi Pengeluaran (Expenses)
+		expSynced, err := s.SyncMissingExpenseJournals(trx)
+		if err != nil {
+			return fmt.Errorf("gagal menyinkronkan pengeluaran: %w", err)
+		}
+		summary.ExpensesSynced = expSynced
+		summary.TotalNewJournals += expSynced
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return summary, nil
 }

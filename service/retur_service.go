@@ -11,21 +11,27 @@ import (
 
 // DTO untuk menerima request dari frontend
 type ReturRequest struct {
-	SalesID          uint   `json:"sales_id" binding:"required"`
-	Reason           string `json:"reason" binding:"required"`
-	Status           string `json:"status"`
-	IsRetur          bool   `json:"is_retur"`
-	IsReturToCompany bool   `json:"is_retur_to_company"`
-	QtyRetur         int    `json:"qty_retur" binding:"required,gt=0"`
+	SalesID          uint    `json:"sales_id" binding:"required"`
+	Reason           string  `json:"reason" binding:"required"`
+	Status           string  `json:"status"`
+	IsRetur          bool    `json:"is_retur"`
+	IsReturToCompany bool    `json:"is_retur_to_company"`
+	QtyRetur         int     `json:"qty_retur" binding:"required,gt=0"`
+	UserID           *string `json:"user_id"`
+	UserName         string  `json:"user_name"`
+	UserRole         string  `json:"user_role"`
 }
 
 type DirectReturRequest struct {
-	ProductID        uint   `json:"product_id"`
-	QtyRetur         int    `json:"qty_retur"`
-	Reason           string `json:"reason"`
-	Status           string `json:"status"`
-	IsRetur          bool   `json:"is_retur"`
-	IsReturToCompany bool   `json:"is_retur_to_company"`
+	ProductID        uint    `json:"product_id"`
+	QtyRetur         int     `json:"qty_retur"`
+	Reason           string  `json:"reason"`
+	Status           string  `json:"status"`
+	IsRetur          bool    `json:"is_retur"`
+	IsReturToCompany bool    `json:"is_retur_to_company"`
+	UserID           *string `json:"user_id"`
+	UserName         string  `json:"user_name"`
+	UserRole         string  `json:"user_role"`
 }
 
 type ReturService interface {
@@ -64,6 +70,33 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 			return errors.New("jumlah qty retur melebihi jumlah pembelian asli")
 		}
 
+		// Resolusi User / Petugas Penanggung Jawab
+		var resolvedUserID *string = req.UserID
+		var resolvedUserName string = req.UserName
+		var resolvedUserRole string = req.UserRole
+
+		if resolvedUserName == "" && resolvedUserID != nil && *resolvedUserID != "" {
+			var u domain.User
+			if err := tx.Where("id = ? OR username = ?", *resolvedUserID, *resolvedUserID).First(&u).Error; err == nil {
+				resolvedUserName = u.Name
+				resolvedUserRole = u.Role
+			}
+		}
+
+		if resolvedUserName == "" {
+			if sale.UserID != "" {
+				var u domain.User
+				if err := tx.Where("id = ? OR username = ?", sale.UserID, sale.UserID).First(&u).Error; err == nil {
+					resolvedUserName = u.Name
+					resolvedUserRole = u.Role
+					resolvedUserID = &u.ID
+				}
+			}
+			if resolvedUserName == "" && sale.MemberName != "" {
+				resolvedUserName = sale.MemberName
+			}
+		}
+
 		// 3. Siapkan & Simpan data Retur baru
 		returData = domain.Retur{
 			SalesID:          &req.SalesID,
@@ -72,6 +105,9 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 			Status:           req.Status,
 			IsRetur:          req.IsRetur,
 			IsReturToCompany: req.IsReturToCompany,
+			UserID:           resolvedUserID,
+			UserName:         resolvedUserName,
+			UserRole:         resolvedUserRole,
 			CreatedAt:        time.Now(),
 			UpdatedAt:        time.Now(),
 		}
@@ -84,12 +120,6 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 		if err != nil {
 			return errors.New("gagal memperbarui status retur pada transaksi penjualan")
 		}
-
-		// sale.Qty = sale.Qty - float64(req.QtyRetur)
-
-		// if err := tx.Save(&sale).Error; err != nil {
-		// 	return err
-		// }
 
 		if !req.IsReturToCompany {
 			err := tx.Model(&domain.Product{}).
@@ -136,6 +166,19 @@ func (s *returService) CreateDirectRetur(req DirectReturRequest) (*domain.Retur,
 			return fmt.Errorf("stok %s tidak mencukupi untuk diretur (sisa stok: %.0f)", product.Nama, product.Saldo)
 		}
 
+		// Resolusi User / Petugas Penanggung Jawab
+		var resolvedUserID *string = req.UserID
+		var resolvedUserName string = req.UserName
+		var resolvedUserRole string = req.UserRole
+
+		if resolvedUserName == "" && resolvedUserID != nil && *resolvedUserID != "" {
+			var u domain.User
+			if err := tx.Where("id = ? OR username = ?", *resolvedUserID, *resolvedUserID).First(&u).Error; err == nil {
+				resolvedUserName = u.Name
+				resolvedUserRole = u.Role
+			}
+		}
+
 		// 3. Simpan data retur (Status langsung ke distributor)
 		returData = domain.Retur{
 			SalesID:          nil,
@@ -144,6 +187,9 @@ func (s *returService) CreateDirectRetur(req DirectReturRequest) (*domain.Retur,
 			Status:           "Retur ke Distributor",
 			IsRetur:          true,
 			IsReturToCompany: true,
+			UserID:           resolvedUserID,
+			UserName:         resolvedUserName,
+			UserRole:         resolvedUserRole,
 			CreatedAt:        time.Now(),
 			UpdatedAt:        time.Now(),
 		}
@@ -176,10 +222,33 @@ func (s *returService) GetAllRetur() ([]domain.Retur, error) {
 	err := s.db.
 		Preload("Product").
 		Preload("Sales.Product").
+		Preload("User").
 		Order("created_at desc, id desc").
 		Find(&results).Error
 
-	return results, err
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range results {
+		if results[i].UserName == "" {
+			if results[i].User != nil && results[i].User.Name != "" {
+				results[i].UserName = results[i].User.Name
+				results[i].UserRole = results[i].User.Role
+			} else if results[i].Sales.UserID != "" {
+				var u domain.User
+				if err := s.db.Where("id = ? OR username = ?", results[i].Sales.UserID, results[i].Sales.UserID).First(&u).Error; err == nil {
+					results[i].UserName = u.Name
+					results[i].UserRole = u.Role
+				}
+			}
+			if results[i].UserName == "" {
+				results[i].UserName = "Kasir (Sistem)"
+			}
+		}
+	}
+
+	return results, nil
 }
 
 // 1. BATALKAN RETUR: Sales Qty bertambah lagi, Stok Toko berkurang lagi (karena barang ditarik balik oleh konsumen)
@@ -193,8 +262,6 @@ func (s *returService) BatalkanRetur(id uint) (*domain.Retur, error) {
 			return errors.New("status retur saat ini tidak dapat dibatalkan")
 		}
 
-		// Asumsi QtyRetur disimpan/diketahui (misal default 1 atau dicatat di field khusus.
-		// Kita ambil sampel statis atau asumsikan 1 jika tidak ada field khusus, sesuaikan dengan logic bisnis Anda)
 		qtyDibatalkan := 1
 
 		// Kembalikan quantity ke transaksi Sales semula

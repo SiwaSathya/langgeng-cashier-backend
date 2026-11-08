@@ -846,3 +846,158 @@ func (s *AttendanceService) GetSummary(
 
 	return &summary, nil
 }
+
+// ======================================================
+// GET TODAY ATTENDANCE STATUS
+// ======================================================
+
+func (s *AttendanceService) GetTodayAttendance(userID string) (*domain.TodayAttendanceStatus, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, errors.New("user ID wajib diisi")
+	}
+
+	now := time.Now().In(baliLocation)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, baliLocation)
+	end := start.Add(24 * time.Hour)
+
+	var record domain.Attendance
+	err := s.DB.Preload("User").
+		Where("user_id = ? AND date >= ? AND date < ?", userID, start, end).
+		Order("id DESC").
+		First(&record).Error
+
+	res := &domain.TodayAttendanceStatus{
+		Date:       now.Format("2006-01-02"),
+		ServerTime: now.Format("15:04:05"),
+	}
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			res.HasAttended = false
+			res.HasClockedOut = false
+			return res, nil
+		}
+		return nil, err
+	}
+
+	res.HasAttended = true
+	res.HasClockedOut = record.CheckOut != nil
+	res.Attendance = &record
+	return res, nil
+}
+
+// ======================================================
+// CLOCK IN
+// ======================================================
+
+func (s *AttendanceService) ClockIn(req domain.ClockInRequest) (*domain.Attendance, error) {
+	userID := strings.TrimSpace(req.UserID)
+	if userID == "" {
+		return nil, errors.New("user ID wajib diisi")
+	}
+
+	var user domain.User
+	if err := s.DB.First(&user, "id = ?", userID).Error; err != nil {
+		return nil, errors.New("data karyawan tidak ditemukan")
+	}
+
+	now := time.Now().In(baliLocation)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, baliLocation)
+	end := start.Add(24 * time.Hour)
+
+	// Periksa apakah sudah ada absensi hari ini
+	var existing domain.Attendance
+	err := s.DB.Where("user_id = ? AND date >= ? AND date < ?", userID, start, end).First(&existing).Error
+	if err == nil {
+		if existing.CheckOut == nil {
+			return nil, errors.New("anda sudah melakukan absen masuk hari ini dan belum absen pulang")
+		}
+		return nil, errors.New("anda sudah menyelesaikan absensi untuk shift hari ini")
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	shift := req.Shift
+	if shift == 0 {
+		// Jika jam >= 13:00 WITA, default shift siang (2)
+		if now.Hour() >= 13 {
+			shift = 2
+		} else {
+			shift = 1
+		}
+	}
+
+	status := "Pagi"
+	if shift == 2 {
+		status = "Siang"
+	}
+
+	record := domain.Attendance{
+		UserID:  user.ID,
+		Date:    start,
+		Shift:   shift,
+		Status:  status,
+		CheckIn: &now,
+		Notes:   strings.TrimSpace(req.Notes),
+	}
+
+	if err := s.DB.Create(&record).Error; err != nil {
+		return nil, err
+	}
+
+	if err := s.DB.Preload("User").First(&record, record.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return &record, nil
+}
+
+// ======================================================
+// CLOCK OUT
+// ======================================================
+
+func (s *AttendanceService) ClockOut(req domain.ClockOutRequest) (*domain.Attendance, error) {
+	userID := strings.TrimSpace(req.UserID)
+	if userID == "" {
+		return nil, errors.New("user ID wajib diisi")
+	}
+
+	now := time.Now().In(baliLocation)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, baliLocation)
+	end := start.Add(24 * time.Hour)
+
+	var record domain.Attendance
+	err := s.DB.Where("user_id = ? AND date >= ? AND date < ?", userID, start, end).Order("id DESC").First(&record).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("belum ada catatan absen masuk hari ini untuk pengguna ini")
+		}
+		return nil, err
+	}
+
+	if record.CheckOut != nil {
+		return nil, errors.New("anda sudah melakukan absen pulang hari ini")
+	}
+
+	updates := map[string]interface{}{
+		"check_out": &now,
+	}
+
+	if strings.TrimSpace(req.Notes) != "" {
+		if record.Notes != "" {
+			updates["notes"] = record.Notes + " | Pulang: " + strings.TrimSpace(req.Notes)
+		} else {
+			updates["notes"] = strings.TrimSpace(req.Notes)
+		}
+	}
+
+	if err := s.DB.Model(&record).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	if err := s.DB.Preload("User").First(&record, record.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return &record, nil
+}

@@ -1,0 +1,1892 @@
+[
+  {
+    "kode": "190017",
+    "nama": "IDEALIFE - FRYPAN + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "20FP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "164.000",
+    "h_pokok": "175.000",
+    "h_jual": "205.000"
+  },
+  {
+    "kode": "190018",
+    "nama": "IDEALIFE - FRYPAN + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "24FP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "204000",
+    "h_pokok": "220.000",
+    "h_jual": "255000"
+  },
+  {
+    "kode": "190019",
+    "nama": "IDEALIFE - FRYPAN + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "28FP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "248000",
+    "h_pokok": "260.000",
+    "h_jual": "310000"
+  },
+  {
+    "kode": "190020",
+    "nama": "IDEALIFE - DEEP FRYPAN + GLASS LID + OIL RACK + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "24DFP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "300000",
+    "h_pokok": "320.000",
+    "h_jual": "375000"
+  },
+  {
+    "kode": "190021",
+    "nama": "IDEALIFE - DEEP FRYPAN + GLASS LID + OIL RACK + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "28DFP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "348000",
+    "h_pokok": "370.000",
+    "h_jual": "435000"
+  },
+  {
+    "kode": "190022",
+    "nama": "IDEALIFE - SAUCEPAN + GLASS LID + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "16SP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "216000",
+    "h_pokok": "230.000",
+    "h_jual": "270000"
+  },
+  {
+    "kode": "190023",
+    "nama": "IDEALIFE - SAUCEPAN + GLASS LID + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "18SP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "244000",
+    "h_pokok": "260.000",
+    "h_jual": "305000"
+  },
+  {
+    "kode": "190024",
+    "nama": "IDEALIFE - CASSEROLE + GLASS LID + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "20CR",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "276000",
+    "h_pokok": "290.000",
+    "h_jual": "345000"
+  },
+  {
+    "kode": "190025",
+    "nama": "IDEALIFE - CASSEROLE + GLASS LID + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "24CR",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "340000",
+    "h_pokok": "360.000",
+    "h_jual": "425000"
+  },
+  {
+    "kode": "190026",
+    "nama": "IDEALIFE - WOK + GLASS LID + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "28WK",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "356000",
+    "h_pokok": "375.000",
+    "h_jual": "445000"
+  },
+  {
+    "kode": "190027",
+    "nama": "IDEALIFE - WOK + GLASS LID + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "30WK",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "388000",
+    "h_pokok": "420.000",
+    "h_jual": "485000"
+  },
+  {
+    "kode": "190028",
+    "nama": "IDEALIFE - WOK + GLASS LID + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "32WK",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "412000",
+    "h_pokok": "450.000",
+    "h_jual": "515000"
+  },
+  {
+    "kode": "190029",
+    "nama": "IDEALIFE - MULTI FUNCTION PAN + GLASS LID + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "24MP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "452000",
+    "h_pokok": "480.000",
+    "h_jual": "565000"
+  },
+  {
+    "kode": "190030",
+    "nama": "IDEALIFE - GRILLPAN COOKWARE + SPATULA",
+    "category": "Set Peralatan Masak",
+    "number": "28GP",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "276000",
+    "h_pokok": "290.000",
+    "h_jual": "345000"
+  },
+  {
+    "kode": "190031",
+    "nama": "IDEALIFE - GRANITE COOKWARE SET",
+    "category": "Set Peralatan Masak",
+    "number": "22A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "720000",
+    "h_pokok": "760.000",
+    "h_jual": "900000"
+  },
+  {
+    "kode": "190032",
+    "nama": "IDEALIFE - GRANITE COOKWARE SET",
+    "category": "Set Peralatan Masak",
+    "number": "22B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "776000",
+    "h_pokok": "820.000",
+    "h_jual": "970000"
+  },
+  {
+    "kode": "190033",
+    "nama": "IDEALIFE - MULTI SIZE GLASS COOKWARE LID",
+    "category": "Set Peralatan Masak",
+    "number": "20A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "72000",
+    "h_pokok": "76.000",
+    "h_jual": "90000"
+  },
+  {
+    "kode": "190034",
+    "nama": "IDEALIFE - MULTI SIZE GLASS COOKWARE LID",
+    "category": "Set Peralatan Masak",
+    "number": "20B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "88000",
+    "h_pokok": "93.000",
+    "h_jual": "110000"
+  },
+  {
+    "kode": "190035",
+    "nama": "IDEALIFE - MULTI SIZE GLASS COOKWARE LID",
+    "category": "Set Peralatan Masak",
+    "number": "20C",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "112000",
+    "h_pokok": "120.000",
+    "h_jual": "140000"
+  },
+  {
+    "kode": "190036",
+    "nama": "IDEALIFE - EGG PAN GRANITE DIECAST",
+    "category": "Set Peralatan Masak",
+    "number": "24A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "188000",
+    "h_pokok": "205.000",
+    "h_jual": "235000"
+  },
+  {
+    "kode": "190037",
+    "nama": "IDEALIFE - EGG PAN GRANITE DIECAST",
+    "category": "Set Peralatan Masak",
+    "number": "24B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "188000",
+    "h_pokok": "205.000",
+    "h_jual": "235000"
+  },
+  {
+    "kode": "190038",
+    "nama": "IDEALIFE - PRESSURE COOKER",
+    "category": "Panci Presto",
+    "number": "PC 8001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "448000",
+    "h_pokok": "460.000",
+    "h_jual": "560000"
+  },
+  {
+    "kode": "190039",
+    "nama": "IDEALIFE - PRESSURE COOKER",
+    "category": "Panci Presto",
+    "number": "PC 1201",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "552000",
+    "h_pokok": "580.000",
+    "h_jual": "690000"
+  },
+  {
+    "kode": "190040",
+    "nama": "IDEALIFE - PRESSURE COOKER DIGITAL",
+    "category": "Panci Presto",
+    "number": "PC 6002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1032000",
+    "h_pokok": "1.150.000",
+    "h_jual": "1290000"
+  },
+  {
+    "kode": "190041",
+    "nama": "IDEALIFE - STEAMER RING",
+    "category": "Ring Kukusan",
+    "number": "SR 2401",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "104000",
+    "h_pokok": "110.000",
+    "h_jual": "130000"
+  },
+  {
+    "kode": "190042",
+    "nama": "IDEALIFE - STEAMER RING",
+    "category": "Ring Kukusan",
+    "number": "SR 2801",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "148000",
+    "h_pokok": "160.000",
+    "h_jual": "185000"
+  },
+  {
+    "kode": "190043",
+    "nama": "IDEALIFE - STEAMER RING",
+    "category": "Ring Kukusan",
+    "number": "SR 3201",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "164000",
+    "h_pokok": "180.000",
+    "h_jual": "205000"
+  },
+  {
+    "kode": "190044",
+    "nama": "IDEALIFE - ELECTRIC CHOPPER",
+    "category": "Chopper & Blender",
+    "number": "216",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "412000",
+    "h_pokok": "440.000",
+    "h_jual": "515000"
+  },
+  {
+    "kode": "190045",
+    "nama": "IDEALIFE - ELECTRIC CHOPPER",
+    "category": "Chopper & Blender",
+    "number": "216S",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "328000",
+    "h_pokok": "350.000",
+    "h_jual": "410000"
+  },
+  {
+    "kode": "190046",
+    "nama": "IDEALIFE - ELECTRIC CHOPPER",
+    "category": "Chopper & Blender",
+    "number": "216J",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "476000",
+    "h_pokok": "501.000",
+    "h_jual": "595000"
+  },
+  {
+    "kode": "190047",
+    "nama": "IDEALIFE - MULTI FUNCTION CHOPPER",
+    "category": "Chopper & Blender",
+    "number": "216A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "688000",
+    "h_pokok": "730.000",
+    "h_jual": "860000"
+  },
+  {
+    "kode": "190048",
+    "nama": "IDEALIFE - ELECTRIC CHOPPER BLENDER",
+    "category": "Chopper & Blender",
+    "number": "219S",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "596000",
+    "h_pokok": "635.000",
+    "h_jual": "745000"
+  },
+  {
+    "kode": "190049",
+    "nama": "IDEALIFE - GLASS ELECTRIC BLENDER SET",
+    "category": "Chopper & Blender",
+    "number": "220A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "676000",
+    "h_pokok": "710.000",
+    "h_jual": "845000"
+  },
+  {
+    "kode": "190050",
+    "nama": "IDEALIFE - HAND BLENDER MULTI SPEED",
+    "category": "Blender Tangan",
+    "number": "214",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "296000",
+    "h_pokok": "320.000",
+    "h_jual": "370000"
+  },
+  {
+    "kode": "190051",
+    "nama": "IDEALIFE - HAND BLENDER MULTI SPEED + SET",
+    "category": "Blender Tangan",
+    "number": "215S",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "488000",
+    "h_pokok": "520.000",
+    "h_jual": "610000"
+  },
+  {
+    "kode": "190052",
+    "nama": "IDEALIFE - ELECTRIC FOOD PROCESSOR",
+    "category": "Pengolah Makanan",
+    "number": "207",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "504000",
+    "h_pokok": "530.000",
+    "h_jual": "630000"
+  },
+  {
+    "kode": "190053",
+    "nama": "IDEALIFE - JUMBO ELECTRIC FOOD PROCESSOR",
+    "category": "Pengolah Makanan",
+    "number": "222",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1000000",
+    "h_pokok": "1.150.000",
+    "h_jual": "1250000"
+  },
+  {
+    "kode": "190054",
+    "nama": "IDEALIFE - ROTATING FOOD DEYHDRATOR",
+    "category": "Pengering Makanan",
+    "number": "DH 3001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "760000",
+    "h_pokok": "801.000",
+    "h_jual": "950000"
+  },
+  {
+    "kode": "190055",
+    "nama": "IDEALIFE - MINI OVEN TOASTER",
+    "category": "Oven",
+    "number": "312",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "480000",
+    "h_pokok": "510.000",
+    "h_jual": "600000"
+  },
+  {
+    "kode": "190056",
+    "nama": "IDEALIFE - OVEN + AIRFRYER TRAY + THERMOMETER",
+    "category": "Oven",
+    "number": "330 / MO 3001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1440000",
+    "h_pokok": "1.601.000",
+    "h_jual": "1800000"
+  },
+  {
+    "kode": "190057",
+    "nama": "IDEALIFE - OVEN + AIRFRYER TRAY + THERMOMETER",
+    "category": "Oven",
+    "number": "335 / MO 3501",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1644000",
+    "h_pokok": "1.850.000",
+    "h_jual": "2055000"
+  },
+  {
+    "kode": "190058",
+    "nama": "IDEALIFE - MULTI FUNCTION OVEN + AIRFRYER TRAY & BASKET + THERMOMETER",
+    "category": "Oven",
+    "number": "MO 3801",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "2000000",
+    "h_pokok": "2.101.000",
+    "h_jual": "2500000"
+  },
+  {
+    "kode": "190059",
+    "nama": "IDEALIFE - THERMOMETER OVEN",
+    "category": "Termometer",
+    "number": "TM 3001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "92000",
+    "h_pokok": "98.000",
+    "h_jual": "115000"
+  },
+  {
+    "kode": "190060",
+    "nama": "IDEALIFE - Multifunction Timer",
+    "category": "Termometer",
+    "number": "TI-3001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "196000",
+    "h_pokok": "210.000",
+    "h_jual": "245000"
+  },
+  {
+    "kode": "190061",
+    "nama": "IDEALIFE - GRANITE NON STICK BAKING PAN",
+    "category": "Loyang Panggang",
+    "number": "BP 2401",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "280000",
+    "h_pokok": "310.000",
+    "h_jual": "350000"
+  },
+  {
+    "kode": "190062",
+    "nama": "IDEALIFE - GRANITE NON STICK BAKING PAN",
+    "category": "Loyang Panggang",
+    "number": "BP 2402",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "280000",
+    "h_pokok": "310.000",
+    "h_jual": "350000"
+  },
+  {
+    "kode": "190063",
+    "nama": "IDEALIFE - GRANITE NON STICK BAKING PAN",
+    "category": "Loyang Panggang",
+    "number": "BP 2403",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "272000",
+    "h_pokok": "290.000",
+    "h_jual": "340000"
+  },
+  {
+    "kode": "190064",
+    "nama": "IDEALIFE - GRANITE NON STICK BAKING PAN",
+    "category": "Loyang Panggang",
+    "number": "BP 2404",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "272000",
+    "h_pokok": "290.000",
+    "h_jual": "340000"
+  },
+  {
+    "kode": "190065",
+    "nama": "IDEALIFE - GRANITE NON STICK BAKING PAN",
+    "category": "Loyang Panggang",
+    "number": "BP 2405",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "272000",
+    "h_pokok": "290.000",
+    "h_jual": "340000"
+  },
+  {
+    "kode": "190066",
+    "nama": "IDEALIFE - GRANITE NON STICK BAKING PAN",
+    "category": "Loyang Panggang",
+    "number": "BP 2406",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "272000",
+    "h_pokok": "290.000",
+    "h_jual": "340000"
+  },
+  {
+    "kode": "190067",
+    "nama": "IDEALIFE - GRANITE NON STICK BAKING PAN",
+    "category": "Loyang Panggang",
+    "number": "BP 2407",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "272000",
+    "h_pokok": "290.000",
+    "h_jual": "340000"
+  },
+  {
+    "kode": "190068",
+    "nama": "IDEALIFE - GRANITE NON STICK BAKING PAN",
+    "category": "Loyang Panggang",
+    "number": "BP 2408",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "272000",
+    "h_pokok": "290.000",
+    "h_jual": "340000"
+  },
+  {
+    "kode": "190069",
+    "nama": "IDEALIFE - AIR FRYER",
+    "category": "Penggoreng Udara",
+    "number": "200B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "960000",
+    "h_pokok": "1.050.000",
+    "h_jual": "1200000"
+  },
+  {
+    "kode": "190070",
+    "nama": "IDEALIFE - AIR FRYER",
+    "category": "Penggoreng Udara",
+    "number": "200B (SMALL)",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "840000",
+    "h_pokok": "890.000",
+    "h_jual": "1050000"
+  },
+  {
+    "kode": "190071",
+    "nama": "IDEALIFE - MULTI FUNCTION AIR FRYER + GRILL PAN + SOUP POT + GLASS LID",
+    "category": "Penggoreng Udara",
+    "number": "200C / AF 3401",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1280000",
+    "h_pokok": "1.401.000",
+    "h_jual": "1600000"
+  },
+  {
+    "kode": "190072",
+    "nama": "IDEALIFE - AIR FRYER + SILICONE TRAY",
+    "category": "Penggoreng Udara",
+    "number": "AF 8001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1504000",
+    "h_pokok": "1.601.000",
+    "h_jual": "1880000"
+  },
+  {
+    "kode": "190073",
+    "nama": "IDEALIFE - DEEP FRYER",
+    "category": "Penggorengan",
+    "number": "200DF / DF 4001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "576000",
+    "h_pokok": "610.000",
+    "h_jual": "720000"
+  },
+  {
+    "kode": "190074",
+    "nama": "IDEALIFE - SILICONE AIR FRYER TRAY",
+    "category": "Nampan Silikon Air Fryer",
+    "number": "AT 1601",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "48000",
+    "h_pokok": "50.000",
+    "h_jual": "60000"
+  },
+  {
+    "kode": "190075",
+    "nama": "IDEALIFE - SILICONE AIR FRYER TRAY",
+    "category": "Nampan Silikon Air Fryer",
+    "number": "AT 1901",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "64000",
+    "h_pokok": "70.000",
+    "h_jual": "80000"
+  },
+  {
+    "kode": "190076",
+    "nama": "IDEALIFE - STAND MIXER MULTI SPEED",
+    "category": "Mixer Berdiri",
+    "number": "221",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "2040000",
+    "h_pokok": "2.301.000",
+    "h_jual": "2550000"
+  },
+  {
+    "kode": "190077",
+    "nama": "IDEALIFE - STAND MIXER MULTI SPEED",
+    "category": "Mixer Berdiri",
+    "number": "221 S",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "2160000",
+    "h_pokok": "2.450.000",
+    "h_jual": "2700000"
+  },
+  {
+    "kode": "190078",
+    "nama": "IDEALIFE - HAND MIXER + MIXER STAND",
+    "category": "Mixer Tangan",
+    "number": "221 B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "392000",
+    "h_pokok": "420.000",
+    "h_jual": "490000"
+  },
+  {
+    "kode": "190079",
+    "nama": "IDEALIFE - Professional Hand Mixer",
+    "category": "Mixer Tangan",
+    "number": "HM 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "200000",
+    "h_pokok": "220.000",
+    "h_jual": "250000"
+  },
+  {
+    "kode": "190080",
+    "nama": "IDEALIFE - DIGITAL KITCHEN SCALE",
+    "category": "Timbangan Dapur & Kopi",
+    "number": "211 / KT - 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "200000",
+    "h_pokok": "220.000",
+    "h_jual": "250000"
+  },
+  {
+    "kode": "190081",
+    "nama": "IDEALIFE - DIGITAL KITCHEN SCALE",
+    "category": "Timbangan Dapur & Kopi",
+    "number": "KT - 5001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "296000",
+    "h_pokok": "320.000",
+    "h_jual": "370000"
+  },
+  {
+    "kode": "190082",
+    "nama": "IDEALIFE - DIGITAL KITCHEN SCALE + BOWL",
+    "category": "Timbangan Dapur & Kopi",
+    "number": "210B / KT - 5002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "292000",
+    "h_pokok": "315.000",
+    "h_jual": "365000"
+  },
+  {
+    "kode": "190083",
+    "nama": "IDEALIFE - DIGITAL KITCHEN SCALE",
+    "category": "Timbangan Dapur & Kopi",
+    "number": "211SE / KT - 5003",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "176000",
+    "h_pokok": "190.000",
+    "h_jual": "220000"
+  },
+  {
+    "kode": "190084",
+    "nama": "IDEALIFE - DIGITAL KITCHEN SCALE + BOWL",
+    "category": "Timbangan Dapur & Kopi",
+    "number": "210C / KT - 5004",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "216000",
+    "h_pokok": "230.000",
+    "h_jual": "270000"
+  },
+  {
+    "kode": "190085",
+    "nama": "IDEALIFE - DIGITAL COFFEE SCALE",
+    "category": "Timbangan Dapur & Kopi",
+    "number": "500C / CT - 5001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "212000",
+    "h_pokok": "",
+    "h_jual": "265000"
+  },
+  {
+    "kode": "190086",
+    "nama": "IDEALIFE - DIGITAL COFFEE SCALE",
+    "category": "Timbangan Dapur & Kopi",
+    "number": "500A / CT - 5002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190087",
+    "nama": "IDEALIFE - PROFESIONAL MULTIFUCTION FROTHER",
+    "category": "Pengocok Minuman",
+    "number": "FR-1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190088",
+    "nama": "IDEALIFE - POCKET SCALE",
+    "category": "Timbangan Saku",
+    "number": "PS 2001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "156000",
+    "h_pokok": "",
+    "h_jual": "195000"
+  },
+  {
+    "kode": "190089",
+    "nama": "IDEALIFE - POCKET SCALE",
+    "category": "Timbangan Saku",
+    "number": "PS 2002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190090",
+    "nama": "IDEALIFE - DIGITAL TRAVEL SCALE",
+    "category": "Timbangan Perjalanan",
+    "number": "TS - 5001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "144000",
+    "h_pokok": "",
+    "h_jual": "180000"
+  },
+  {
+    "kode": "190091",
+    "nama": "IDEALIFE - DIGITAL BATHROOM SCALE",
+    "category": "Timbangan Badan",
+    "number": "270S / BS 1803",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "220.000",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190092",
+    "nama": "IDEALIFE - DIGITAL BATHROOM SCALE BATIK",
+    "category": "Timbangan Badan",
+    "number": "BS 1801",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "220.000",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190093",
+    "nama": "IDEALIFE - DIGITAL BATHROOM SCALE BATIK",
+    "category": "Timbangan Badan",
+    "number": "BS 1802",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "220.000",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190094",
+    "nama": "IDEALIFE - KNIFE SET",
+    "category": "Set Pisau",
+    "number": "160",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "160000",
+    "h_pokok": "",
+    "h_jual": "200000"
+  },
+  {
+    "kode": "190095",
+    "nama": "IDEALIFE - KNIFE SET",
+    "category": "Set Pisau",
+    "number": "163",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190096",
+    "nama": "IDEALIFE - KNIFE SET",
+    "category": "Set Pisau",
+    "number": "163A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "244000",
+    "h_pokok": "",
+    "h_jual": "305000"
+  },
+  {
+    "kode": "190097",
+    "nama": "IDEALIFE - KNIFE SET",
+    "category": "Set Pisau",
+    "number": "163B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "288000",
+    "h_pokok": "",
+    "h_jual": "360000"
+  },
+  {
+    "kode": "190098",
+    "nama": "IDEALIFE - KNIFE SET",
+    "category": "Set Pisau",
+    "number": "163S",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "300000",
+    "h_pokok": "",
+    "h_jual": "375000"
+  },
+  {
+    "kode": "190099",
+    "nama": "IDEALIFE - PROFESSIONAL KNIFE SET",
+    "category": "Set Pisau",
+    "number": "KS 7001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "224000",
+    "h_pokok": "",
+    "h_jual": "280000"
+  },
+  {
+    "kode": "190100",
+    "nama": "IDEALIFE - PROFESSIONAL KNIFE SET",
+    "category": "Set Pisau",
+    "number": "KS 6001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "248000",
+    "h_pokok": "",
+    "h_jual": "310000"
+  },
+  {
+    "kode": "190101",
+    "nama": "IDEALIFE - PROFESSIONAL KNIFE SET",
+    "category": "Set Pisau",
+    "number": "KS 6002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "240000",
+    "h_pokok": "",
+    "h_jual": "300000"
+  },
+  {
+    "kode": "190102",
+    "nama": "IDEALIFE - PROFESSIONAL KNIFE SET",
+    "category": "Set Pisau",
+    "number": "KS 6003",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "412000",
+    "h_pokok": "",
+    "h_jual": "515000"
+  },
+  {
+    "kode": "190103",
+    "nama": "IDEALIFE - BREAD KNIFE 8\"\"",
+    "category": "Pisau",
+    "number": "KNIFE 162",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "120000",
+    "h_pokok": "",
+    "h_jual": "150000"
+  },
+  {
+    "kode": "190104",
+    "nama": "IDEALIFE - ELECTRIC KNIFE",
+    "category": "Pisau Listrik",
+    "number": "170 A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "480000",
+    "h_pokok": "",
+    "h_jual": "600000"
+  },
+  {
+    "kode": "190105",
+    "nama": "IDEALIFE - STEAK KNIFE & FORK",
+    "category": "Pisau Listrik",
+    "number": "170 B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "144000",
+    "h_pokok": "",
+    "h_jual": "180000"
+  },
+  {
+    "kode": "190106",
+    "nama": "IDEALIFE - PLASTIC KNIFE HOLDER",
+    "category": "Tempat Pisau",
+    "number": "160 A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "108000",
+    "h_pokok": "",
+    "h_jual": "135000"
+  },
+  {
+    "kode": "190107",
+    "nama": "IDEALIFE - MAGNET KNIFE HOLDER",
+    "category": "Tempat Pisau",
+    "number": "160 C",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190108",
+    "nama": "IDEALIFE - STAINLESS DOUBLE KNIFE HOLDER",
+    "category": "Tempat Pisau",
+    "number": "160 H",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "160000",
+    "h_pokok": "",
+    "h_jual": "200000"
+  },
+  {
+    "kode": "190109",
+    "nama": "IDEALIFE - PROFESSIONAL KNIFE SHARPENER",
+    "category": "Pengasah Pisau",
+    "number": "160F / KP 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "152000",
+    "h_pokok": "",
+    "h_jual": "190000"
+  },
+  {
+    "kode": "190110",
+    "nama": "IDEALIFE - 8 IN 1 PROFESSIONAL KITCHEN SCISSORS",
+    "category": "Gunting",
+    "number": "162A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "96000",
+    "h_pokok": "",
+    "h_jual": "120000"
+  },
+  {
+    "kode": "190111",
+    "nama": "IDEALIFE - FOLDING CHOPPING BOARD",
+    "category": "Talenan",
+    "number": "160I",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "68000",
+    "h_pokok": "",
+    "h_jual": "85000"
+  },
+  {
+    "kode": "190112",
+    "nama": "IDEALIFE - 3 IN 1 MULTI FUNCTION CHOPPING BOARD",
+    "category": "Talenan",
+    "number": "CB-3001 / 160J",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "148000",
+    "h_pokok": "",
+    "h_jual": "185000"
+  },
+  {
+    "kode": "190113",
+    "nama": "IDEALIFE - KITCHEN UTENSILS SET",
+    "category": "Set Peralatan Dapur",
+    "number": "172A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "256000",
+    "h_pokok": "",
+    "h_jual": "320000"
+  },
+  {
+    "kode": "190114",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "44000",
+    "h_pokok": "",
+    "h_jual": "55000"
+  },
+  {
+    "kode": "190115",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "32000",
+    "h_pokok": "",
+    "h_jual": "40000"
+  },
+  {
+    "kode": "190116",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "44000",
+    "h_pokok": "",
+    "h_jual": "55000"
+  },
+  {
+    "kode": "190117",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "32000",
+    "h_pokok": "",
+    "h_jual": "40000"
+  },
+  {
+    "kode": "190118",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "44000",
+    "h_pokok": "",
+    "h_jual": "55000"
+  },
+  {
+    "kode": "190119",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "44000",
+    "h_pokok": "",
+    "h_jual": "55000"
+  },
+  {
+    "kode": "190120",
+    "nama": "IDEALIFE - KITCHEN UTENSILS 9 INCH",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "32000",
+    "h_pokok": "",
+    "h_jual": "40000"
+  },
+  {
+    "kode": "190121",
+    "nama": "IDEALIFE - KITCHEN UTENSILS 12 INCH",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "48000",
+    "h_pokok": "",
+    "h_jual": "60000"
+  },
+  {
+    "kode": "190122",
+    "nama": "IDEALIFE - KITCHEN UTENSILS 14 INCH",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "64000",
+    "h_pokok": "",
+    "h_jual": "80000"
+  },
+  {
+    "kode": "190123",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "32000",
+    "h_pokok": "",
+    "h_jual": "40000"
+  },
+  {
+    "kode": "190124",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "32000",
+    "h_pokok": "",
+    "h_jual": "40000"
+  },
+  {
+    "kode": "190125",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "32000",
+    "h_pokok": "",
+    "h_jual": "40000"
+  },
+  {
+    "kode": "190126",
+    "nama": "IDEALIFE - KITCHEN UTENSILS",
+    "category": "Peralatan Dapur",
+    "number": "172B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "32000",
+    "h_pokok": "",
+    "h_jual": "40000"
+  },
+  {
+    "kode": "190127",
+    "nama": "IDEALIFE - ROYAL CUTLERY SET",
+    "category": "Set Alat Makan",
+    "number": "173A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "304000",
+    "h_pokok": "",
+    "h_jual": "380000"
+  },
+  {
+    "kode": "190128",
+    "nama": "IDEALIFE - RICE COOKER LOW SUGAR / CARBO",
+    "category": "Penanak Nasi",
+    "number": "100C",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "896000",
+    "h_pokok": "",
+    "h_jual": "1120000"
+  },
+  {
+    "kode": "190129",
+    "nama": "IDEALIFE - MINI RICE COOKER LOW SUGAR / CARBO",
+    "category": "Penanak Nasi",
+    "number": "110B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "556000",
+    "h_pokok": "",
+    "h_jual": "695000"
+  },
+  {
+    "kode": "190130",
+    "nama": "IDEALIFE - RICE COOKER LOW SUGAR / CARBO",
+    "category": "Penanak Nasi",
+    "number": "100D",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "960000",
+    "h_pokok": "",
+    "h_jual": "1200000"
+  },
+  {
+    "kode": "190131",
+    "nama": "IDEALIFE - SLOW COOKER",
+    "category": "Panci Masak Lambat",
+    "number": "325",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "408000",
+    "h_pokok": "",
+    "h_jual": "510000"
+  },
+  {
+    "kode": "190132",
+    "nama": "IDEALIFE - SLOW COOKER",
+    "category": "Panci Masak Lambat",
+    "number": "350",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "600000",
+    "h_pokok": "",
+    "h_jual": "750000"
+  },
+  {
+    "kode": "190133",
+    "nama": "IDEALIFE - ELECTRIC SINGLE STOVE",
+    "category": "Kompor Listrik & Induksi",
+    "number": "401S / ES 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "176000",
+    "h_pokok": "",
+    "h_jual": "220000"
+  },
+  {
+    "kode": "190134",
+    "nama": "IDEALIFE - ELECTRIC DOUBLE STOVE",
+    "category": "Kompor Listrik & Induksi",
+    "number": "402 / ES 2001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "384000",
+    "h_pokok": "",
+    "h_jual": "480000"
+  },
+  {
+    "kode": "190135",
+    "nama": "IDEALIFE - ELECTRIC TEA & COFFEE WARMER",
+    "category": "Kompor Listrik & Induksi",
+    "number": "402A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "656000",
+    "h_pokok": "",
+    "h_jual": "820000"
+  },
+  {
+    "kode": "190136",
+    "nama": "IDEALIFE - 2 IN 1 HEAT CONDUCTION PLATE / DEFROSTER",
+    "category": "Kompor Listrik & Induksi",
+    "number": "28B/ CP 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "208000",
+    "h_pokok": "",
+    "h_jual": "260000"
+  },
+  {
+    "kode": "190137",
+    "nama": "IDEALIFE - 3 IN 1 HEAT CONDUCTION PLATE",
+    "category": "Kompor Listrik & Induksi",
+    "number": "CP 1002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "256000",
+    "h_pokok": "",
+    "h_jual": "320000"
+  },
+  {
+    "kode": "190138",
+    "nama": "IDEALIFE - MINI INDUCTION COOKER",
+    "category": "Kompor Listrik & Induksi",
+    "number": "IC 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "460000",
+    "h_pokok": "",
+    "h_jual": "575000"
+  },
+  {
+    "kode": "190139",
+    "nama": "IDEALIFE - INDUCTION COOKER",
+    "category": "Kompor Listrik & Induksi",
+    "number": "201 / IC 1301",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "608000",
+    "h_pokok": "",
+    "h_jual": "760000"
+  },
+  {
+    "kode": "190140",
+    "nama": "IDEALIFE - DOUBLE INDUCTION COOKER",
+    "category": "Kompor Listrik & Induksi",
+    "number": "201B / IC 2001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1688000",
+    "h_pokok": "",
+    "h_jual": "2110000"
+  },
+  {
+    "kode": "190141",
+    "nama": "IDEALIFE - ELECTRIC FOOD WARMER & HEATING TRAY",
+    "category": "Pemanggang & Hot Pot",
+    "number": "116C",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "624000",
+    "h_pokok": "",
+    "h_jual": "780000"
+  },
+  {
+    "kode": "190142",
+    "nama": "IDEALIFE - ELECTRIC GRILL",
+    "category": "Pemanggang & Hot Pot",
+    "number": "EG 5001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "596000",
+    "h_pokok": "",
+    "h_jual": "745000"
+  },
+  {
+    "kode": "190143",
+    "nama": "IDEALIFE - ELECTRIC GRILL & HOT POT",
+    "category": "Pemanggang & Hot Pot",
+    "number": "EG 5002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1120000",
+    "h_pokok": "",
+    "h_jual": "1400000"
+  },
+  {
+    "kode": "190144",
+    "nama": "IDEALIFE - ELECTRIC SERVER & BUFFET WARMER",
+    "category": "Penghangat Hidangan",
+    "number": "BS 4501 / BW 4501",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "680000",
+    "h_pokok": "",
+    "h_jual": "850000"
+  },
+  {
+    "kode": "190145",
+    "nama": "IDEALIFE - ELECTRIC SERVER & BUFFET WARMER",
+    "category": "Penghangat Hidangan",
+    "number": "BW 7201",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "792000",
+    "h_pokok": "",
+    "h_jual": "990000"
+  },
+  {
+    "kode": "190146",
+    "nama": "IDEALIFE - 3 IN 1 SANDWICH MAKER",
+    "category": "Pemanggang Sandwich, Roti & Crepe",
+    "number": "202 / SM 4001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "416000",
+    "h_pokok": "",
+    "h_jual": "520000"
+  },
+  {
+    "kode": "190147",
+    "nama": "IDEALIFE - 3in1 Panini & Waffle Maker - 3in1 Pemanggang Panini & Waffle",
+    "category": "Pemanggang Sandwich, Roti & Crepe",
+    "number": "EG-3002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1064000",
+    "h_pokok": "",
+    "h_jual": "1330000"
+  },
+  {
+    "kode": "190148",
+    "nama": "IDEALIFE - TOASTER 4 SLICES",
+    "category": "Pemanggang Sandwich, Roti & Crepe",
+    "number": "BT 4001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "344000",
+    "h_pokok": "",
+    "h_jual": "430000"
+  },
+  {
+    "kode": "190149",
+    "nama": "IDEALIFE - HAND CREPE MAKER",
+    "category": "Pemanggang Sandwich, Roti & Crepe",
+    "number": "HC- 2001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "312000",
+    "h_pokok": "",
+    "h_jual": "390000"
+  },
+  {
+    "kode": "190150",
+    "nama": "IDEALIFE - ELECTRIC PASTA MAKER",
+    "category": "Pembuat Pasta",
+    "number": "PM 9001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1416000",
+    "h_pokok": "",
+    "h_jual": "1770000"
+  },
+  {
+    "kode": "190151",
+    "nama": "IDEALIFE - MEAT GRINDER",
+    "category": "Penggiling Daging",
+    "number": "MG 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "880000",
+    "h_pokok": "",
+    "h_jual": "1100000"
+  },
+  {
+    "kode": "190152",
+    "nama": "IDEALIFE - ICE MAKER PEMBUAT ES BATU",
+    "category": "Pembuat Es",
+    "number": "121 / IM1101",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1336000",
+    "h_pokok": "",
+    "h_jual": "1670000"
+  },
+  {
+    "kode": "190153",
+    "nama": "IDEALIFE - JUMBO ICE SHAVER MESIN PENYERUT ES JUMBO",
+    "category": "Pembuat Es",
+    "number": "IS - 1201",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "680000",
+    "h_pokok": "",
+    "h_jual": "850000"
+  },
+  {
+    "kode": "190154",
+    "nama": "IDEALIFE - COFFE MAKER",
+    "category": "Pembuat Kopi",
+    "number": "CM 1201",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "336000",
+    "h_pokok": "",
+    "h_jual": "420000"
+  },
+  {
+    "kode": "190155",
+    "nama": "IDEALIFE - COFFE MAKER",
+    "category": "Pembuat Kopi",
+    "number": "CM 1801",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "488000",
+    "h_pokok": "",
+    "h_jual": "610000"
+  },
+  {
+    "kode": "190156",
+    "nama": "IDEALIFE - ELECTRIC COFFEE GRINDER",
+    "category": "Penggiling Kopi",
+    "number": "217B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "600000",
+    "h_pokok": "",
+    "h_jual": "750000"
+  },
+  {
+    "kode": "190157",
+    "nama": "IDEALIFE - MULTI FUNCTION ELECTRIC COFFEE GRINDER",
+    "category": "Penggiling Kopi",
+    "number": "CG 1002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "304000",
+    "h_pokok": "",
+    "h_jual": "380000"
+  },
+  {
+    "kode": "190158",
+    "nama": "IDEALIFE - STERILIZER DISH DRYER",
+    "category": "Pengering & Sterilisasi Piring",
+    "number": "119 / DD 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "752000",
+    "h_pokok": "",
+    "h_jual": "940000"
+  },
+  {
+    "kode": "190159",
+    "nama": "IDEALIFE - STERILIZER DISH DRYER",
+    "category": "Pengering & Sterilisasi Piring",
+    "number": "119A / DD 1002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1080000",
+    "h_pokok": "",
+    "h_jual": "1350000"
+  },
+  {
+    "kode": "190160",
+    "nama": "IDEALIFE - FOOD STEAMER",
+    "category": "Pengukus Makanan",
+    "number": "114C / FS 2501",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1240000",
+    "h_pokok": "",
+    "h_jual": "1550000"
+  },
+  {
+    "kode": "190161",
+    "nama": "IDEALIFE - FOOD STEAMER",
+    "category": "Pengukus Makanan",
+    "number": "FS 1801",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "616000",
+    "h_pokok": "",
+    "h_jual": "770000"
+  },
+  {
+    "kode": "190162",
+    "nama": "IDEALIFE - ELECTRIC CITRUS JUICER",
+    "category": "Pembuat Jus",
+    "number": "201CJ",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "280000",
+    "h_pokok": "",
+    "h_jual": "350000"
+  },
+  {
+    "kode": "190163",
+    "nama": "IDEALIFE - MINI ELECTRIC SLOW JUICER",
+    "category": "Pembuat Jus",
+    "number": "201SJA",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "848000",
+    "h_pokok": "",
+    "h_jual": "1060000"
+  },
+  {
+    "kode": "190164",
+    "nama": "IDEALIFE - ELECTRIC SLOW JUICER",
+    "category": "Pembuat Jus",
+    "number": "201SJB",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1248000",
+    "h_pokok": "",
+    "h_jual": "1560000"
+  },
+  {
+    "kode": "190165",
+    "nama": "IDEALIFE - ELECTRIC JUICER",
+    "category": "Pembuat Jus",
+    "number": "JC 6001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "536000",
+    "h_pokok": "",
+    "h_jual": "670000"
+  },
+  {
+    "kode": "190166",
+    "nama": "IDEALIFE - Digital Soy Milk Maker -Pembuat Susu Kedelai",
+    "category": "Pembuat Susu Kedelai",
+    "number": "DM -1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "752000",
+    "h_pokok": "",
+    "h_jual": "940000"
+  },
+  {
+    "kode": "190167",
+    "nama": "IDEALIFE - ELECTRIC LUNCH BOX",
+    "category": "Kotak Makan Listrik",
+    "number": "110A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "256000",
+    "h_pokok": "",
+    "h_jual": "320000"
+  },
+  {
+    "kode": "190168",
+    "nama": "IDEALIFE - EGG COOKER PEMASAK TELUR",
+    "category": "Pemasak Telur",
+    "number": "EC- 6001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "312000",
+    "h_pokok": "",
+    "h_jual": "390000"
+  },
+  {
+    "kode": "190169",
+    "nama": "IDEALIFE - WATER BOILER",
+    "category": "Pemanas Air",
+    "number": "120A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1240000",
+    "h_pokok": "",
+    "h_jual": "1550000"
+  },
+  {
+    "kode": "190170",
+    "nama": "IDEALIFE - WATER BOILER",
+    "category": "Pemanas Air",
+    "number": "120B",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1448000",
+    "h_pokok": "",
+    "h_jual": "1810000"
+  },
+  {
+    "kode": "190171",
+    "nama": "IDEALIFE - WATER BOILER",
+    "category": "Pemanas Air",
+    "number": "120C",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1696000",
+    "h_pokok": "",
+    "h_jual": "2120000"
+  },
+  {
+    "kode": "190172",
+    "nama": "IDEALIFE - ELECTRIC KETTLE",
+    "category": "Ketel Listrik",
+    "number": "110",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "128000",
+    "h_pokok": "",
+    "h_jual": "160000"
+  },
+  {
+    "kode": "190173",
+    "nama": "IDEALIFE - TRAVEL FOLDING KETTLE",
+    "category": "Ketel Listrik",
+    "number": "110S",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "124000",
+    "h_pokok": "",
+    "h_jual": "155000"
+  },
+  {
+    "kode": "190174",
+    "nama": "IDEALIFE - MINI AUTO ELECTRIC KETTLE",
+    "category": "Ketel Listrik",
+    "number": "110M",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "192000",
+    "h_pokok": "",
+    "h_jual": "240000"
+  },
+  {
+    "kode": "190175",
+    "nama": "IDEALIFE - ELECTRIC TEMPERATURE CONTROL KETTLE",
+    "category": "Ketel Listrik",
+    "number": "110T",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "376000",
+    "h_pokok": "",
+    "h_jual": "470000"
+  },
+  {
+    "kode": "190176",
+    "nama": "IDEALIFE - ELECTRIC TEMPERATURE CONTROL KETTLE",
+    "category": "Ketel Listrik",
+    "number": "110TA",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "400000",
+    "h_pokok": "",
+    "h_jual": "500000"
+  },
+  {
+    "kode": "190177",
+    "nama": "IDEALIFE - ELECTRIC GOOSENECK KETTLE",
+    "category": "Ketel Listrik",
+    "number": "112",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "408000",
+    "h_pokok": "",
+    "h_jual": "510000"
+  },
+  {
+    "kode": "190178",
+    "nama": "IDEALIFE - ELECTRIC STEAM TEA KETTLE",
+    "category": "Ketel Listrik",
+    "number": "113",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "368000",
+    "h_pokok": "",
+    "h_jual": "460000"
+  },
+  {
+    "kode": "190179",
+    "nama": "IDEALIFE - ELECTRIC GLASS KETTLE / TEKO LISTRIK KACA",
+    "category": "Ketel Listrik",
+    "number": "113 S",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "336000",
+    "h_pokok": "",
+    "h_jual": "420000"
+  },
+  {
+    "kode": "190180",
+    "nama": "IDEALIFE - ELECTRIC HOTEL KETTLE + TRAY SET",
+    "category": "Ketel Listrik",
+    "number": "111S",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "400000",
+    "h_pokok": "",
+    "h_jual": "500000"
+  },
+  {
+    "kode": "190181",
+    "nama": "IDEALIFE - ELECTRIC THERMO POT",
+    "category": "Ketel Listrik",
+    "number": "111A",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "756000",
+    "h_pokok": "",
+    "h_jual": "945000"
+  },
+  {
+    "kode": "190182",
+    "nama": "IDEALIFE - DIGITAL WATER POT- TEKO AIR DIGITAL",
+    "category": "Panci Masak Multifungsi",
+    "number": "WP - 2501",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "736000",
+    "h_pokok": "",
+    "h_jual": "920000"
+  },
+  {
+    "kode": "190183",
+    "nama": "IDEALIFE - MULTI COOKER POT - PANCI MULTI FUNGSI",
+    "category": "Panci Masak Multifungsi",
+    "number": "MC - 8001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "280000",
+    "h_pokok": "",
+    "h_jual": "350000"
+  },
+  {
+    "kode": "190184",
+    "nama": "IDEALIFE - Electric Tumbler",
+    "category": "Tumbler Listrik",
+    "number": "ET- 4001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "336000",
+    "h_pokok": "",
+    "h_jual": "420000"
+  },
+  {
+    "kode": "190185",
+    "nama": "IDEALIFE - FOOD VACUUM SEALER",
+    "category": "Penyegel Vakum",
+    "number": "600A / VS 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "416000",
+    "h_pokok": "",
+    "h_jual": "520000"
+  },
+  {
+    "kode": "190186",
+    "nama": "IDEALIFE - 3 IN 1 WET & DRY VACUUM SEALER",
+    "category": "Penyegel Vakum",
+    "number": "VS 1002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "584000",
+    "h_pokok": "",
+    "h_jual": "730000"
+  },
+  {
+    "kode": "190187",
+    "nama": "IDEALIFE - Automatic Vacuum Sealer – Penyegel Vacuum Otomatis",
+    "category": "Penyegel Vakum",
+    "number": "VS 1003",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1040000",
+    "h_pokok": "",
+    "h_jual": "1300000"
+  },
+  {
+    "kode": "190188",
+    "nama": "IDEALIFE - AIR PURIFIER",
+    "category": "Pemurni Udara",
+    "number": "131",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "960000",
+    "h_pokok": "",
+    "h_jual": "1200000"
+  },
+  {
+    "kode": "190189",
+    "nama": "IDEALIFE - GARMENT STEAMER",
+    "category": "Setrika Uap Pakaian",
+    "number": "GS 2701",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "1080000",
+    "h_pokok": "",
+    "h_jual": "1350000"
+  },
+  {
+    "kode": "190190",
+    "nama": "IDEALIFE - ELECTRIC SPIN SCRUBBER",
+    "category": "Sikat Pembersih Listrik",
+    "number": "101B / ES 9001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "680000",
+    "h_pokok": "",
+    "h_jual": "850000"
+  },
+  {
+    "kode": "190191",
+    "nama": "IDEALIFE - ELECTRIC MOP",
+    "category": "Pel Listrik",
+    "number": "101A / EM 2001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "760000",
+    "h_pokok": "",
+    "h_jual": "950000"
+  },
+  {
+    "kode": "190192",
+    "nama": "IDEALIFE - 3 IN 1 MINI VACUUM CLEANER + HEPA",
+    "category": "Penyedot Debu & Pembersih UV",
+    "number": "133 / VC 8001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "452000",
+    "h_pokok": "",
+    "h_jual": "565000"
+  },
+  {
+    "kode": "190193",
+    "nama": "IDEALIFE - 2 IN 1 MINI VACUM CLEANER",
+    "category": "Penyedot Debu & Pembersih UV",
+    "number": "130A / VC 8002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "448000",
+    "h_pokok": "",
+    "h_jual": "560000"
+  },
+  {
+    "kode": "190194",
+    "nama": "IDEALIFE - 2 IN 1 MINI VACUM CLEANER",
+    "category": "Penyedot Debu & Pembersih UV",
+    "number": "130B / VC 8003",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "448000",
+    "h_pokok": "",
+    "h_jual": "560000"
+  },
+  {
+    "kode": "190195",
+    "nama": "IDEALIFE - DUST UV MITE VACUUM CLEANER + HEPA",
+    "category": "Penyedot Debu & Pembersih UV",
+    "number": "132A / VC 6001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "592000",
+    "h_pokok": "",
+    "h_jual": "740000"
+  },
+  {
+    "kode": "190196",
+    "nama": "IDEALIFE - WET & DRY VACUUM CLEANER",
+    "category": "Penyedot Debu & Pembersih UV",
+    "number": "150VA / VC 1501",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "740000",
+    "h_pokok": "",
+    "h_jual": "925000"
+  },
+  {
+    "kode": "190197",
+    "nama": "IDEALIFE - Car Inverter",
+    "category": "Inverter Mobil",
+    "number": "CI - 2001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "360000",
+    "h_pokok": "",
+    "h_jual": "450000"
+  },
+  {
+    "kode": "190198",
+    "nama": "IDEALIFE - FLOOR FAN 20\"\"",
+    "category": "Kipas Lantai",
+    "number": "FF 2001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "528000",
+    "h_pokok": "",
+    "h_jual": "660000"
+  },
+  {
+    "kode": "190199",
+    "nama": "IDEALIFE - AIR COOLER FAN",
+    "category": "Kipas Pendingin Udara",
+    "number": "CF 7501",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "800000",
+    "h_pokok": "",
+    "h_jual": "1000000"
+  },
+  {
+    "kode": "190213",
+    "nama": "IDEALIFE - WIRELESS DOORBELL AC 1 REMOTE",
+    "category": "Bel Pintu Nirkabel",
+    "number": "291 / WD 1001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "148000",
+    "h_pokok": "",
+    "h_jual": "185000"
+  },
+  {
+    "kode": "190214",
+    "nama": "IDEALIFE - WIRELESS DOORBELL AC 2 REMOTE",
+    "category": "Bel Pintu Nirkabel",
+    "number": "292 / WD 1002",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "204000",
+    "h_pokok": "",
+    "h_jual": "255000"
+  },
+  {
+    "kode": "190215",
+    "nama": "IDEALIFE - WIRELESS DOORBELL AC 1 SPEAKER 1 REMOTE",
+    "category": "Bel Pintu Nirkabel",
+    "number": "295 / WD 1101",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "192000",
+    "h_pokok": "",
+    "h_jual": "240000"
+  },
+  {
+    "kode": "190216",
+    "nama": "IDEALIFE - AC WIRLESS DORBELL",
+    "category": "Bel Pintu Nirkabel",
+    "number": "295A / WD 2101",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "292000",
+    "h_pokok": "",
+    "h_jual": "365000"
+  },
+  {
+    "kode": "190217",
+    "nama": "IDEALIFE - AC WIRLESS DORBELL",
+    "category": "Bel Pintu Nirkabel",
+    "number": "295S / WD 1102",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "260000",
+    "h_pokok": "",
+    "h_jual": "325000"
+  },
+  {
+    "kode": "190218",
+    "nama": "IDEALIFE - MOTION SENSOR DOORBELL",
+    "category": "Bel Pintu Nirkabel",
+    "number": "306A / WD 3001",
+    "supplier": "PT IDEALIFE MAKMUR",
+    "h_beli": "128000",
+    "h_pokok": "",
+    "h_jual": "160000"
+  }
+]

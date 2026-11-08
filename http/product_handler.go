@@ -1,12 +1,15 @@
 package http
 
 import (
-	"backend-cashier/domain"
-	"backend-cashier/service"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"backend-cashier/domain"
+	"backend-cashier/service"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v4"
 )
 
 type ProductHandler struct {
@@ -19,11 +22,97 @@ func NewProductHandler(s *service.ProductService) *ProductHandler {
 
 func (h *ProductHandler) RegisterRoutes(app fiber.Router) {
 	group := app.Group("api/products")
+	group.Get("/historical-stock", h.GetHistoricalStock)
+	group.Get("/export-stock", h.ExportHistoricalStock)
 	group.Get("/", h.FetchProducts)
 	group.Get("/:id", h.GetByID)
 	group.Post("/", h.Create)
 	group.Put("/:id", h.Update)
 	group.Delete("/:id", h.Delete)
+}
+
+// isRestrictedStockRole memeriksa apakah role pengguna adalah kasir atau super-kasir
+func isRestrictedStockRole(c *fiber.Ctx) bool {
+	// 1. Cek query param
+	roleQuery := strings.ToLower(strings.TrimSpace(c.Query("role")))
+	if roleQuery == "kasir" || strings.Contains(roleQuery, "kasir") {
+		return true
+	}
+
+	// 2. Cek Header X-User-Role
+	roleHeader := strings.ToLower(strings.TrimSpace(c.Get("X-User-Role")))
+	if roleHeader == "kasir" || strings.Contains(roleHeader, "kasir") {
+		return true
+	}
+
+	// 3. Cek JWT Bearer token
+	authHeader := c.Get("Authorization")
+	if authHeader != "" {
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		tokenStr = strings.TrimSpace(tokenStr)
+		if tokenStr != "" {
+			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+				return []byte("smartpos_secret_key"), nil
+			})
+			if err == nil && token != nil {
+				if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+					if r, exists := claims["role"]; exists {
+						userRole := strings.ToLower(fmt.Sprintf("%v", r))
+						if userRole == "kasir" || strings.Contains(userRole, "kasir") {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// GetHistoricalStock mengambil laporan stok per tanggal tertentu beserta nilai nominal persediaan
+func (h *ProductHandler) GetHistoricalStock(c *fiber.Ctx) error {
+	if isRestrictedStockRole(c) {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "Akses ditolak: Fitur nilai persediaan stok modal tidak dapat diakses oleh role kasir dan super-kasir",
+		})
+	}
+
+	cutoffDate := c.Query("cutoff_date")
+	location := c.Query("location")
+	search := c.Query("search")
+
+	report, err := h.Service.GetHistoricalStockReport(cutoffDate, location, search)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(report)
+}
+
+// ExportHistoricalStock mengunduh file Excel laporan stok per tanggal tertentu
+func (h *ProductHandler) ExportHistoricalStock(c *fiber.Ctx) error {
+	if isRestrictedStockRole(c) {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "Akses ditolak: Fitur ekspor nilai persediaan stok modal tidak dapat diakses oleh role kasir dan super-kasir",
+		})
+	}
+
+	cutoffDate := c.Query("cutoff_date")
+	location := c.Query("location")
+	search := c.Query("search")
+
+	excelBytes, err := h.Service.ExportHistoricalStockExcel(cutoffDate, location, search)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	fileName := fmt.Sprintf("Laporan_Stok_%s.xlsx", cutoffDate)
+	if cutoffDate == "" {
+		fileName = fmt.Sprintf("Laporan_Stok_%s.xlsx", "terkini")
+	}
+
+	c.Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
+	return c.Send(excelBytes)
 }
 
 // FetchProducts godoc
@@ -59,66 +148,72 @@ func (h *ProductHandler) FetchProducts(c *fiber.Ctx) error {
 // @Router       /products/{id} [get]
 func (h *ProductHandler) GetByID(c *fiber.Ctx) error {
 	id := c.Params("id")
-	p, err := h.Service.GetByID(id)
+	data, err := h.Service.GetByID(id)
 	if err != nil {
-		return c.Status(404).JSON(fiber.Map{"error": "Produk tidak ditemukan"})
+		return c.Status(404).JSON(fiber.Map{"message": "product not found"})
 	}
-	return c.Status(200).JSON(p)
+	return c.Status(200).JSON(fiber.Map{"data": data})
 }
 
 // Create godoc
-// @Summary      Create New Product
+// @Summary      Create Product
 // @Tags         Products
 // @Accept       json
 // @Produce      json
-// @Param        product  body      domain.ProductRequest  true  "Product Body"
-// @Success      201      {object}  map[string]string
+// @Param        product  body      domain.ProductRequest  true  "Product data"
+// @Success      200      {object}  map[string]string
 // @Failure      400      {object}  map[string]string
-// @Failure      500      {object}  map[string]string
 // @Router       /products [post]
 func (h *ProductHandler) Create(c *fiber.Ctx) error {
-	var p domain.Product
-	if err := c.BodyParser(&p); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	var input domain.Product
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
-	if err := h.Service.Create(p); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+
+	if err := h.Service.Create(input); err != nil {
+		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
-	return c.Status(201).JSON(fiber.Map{"message": "Produk berhasil dibuat"})
+
+	return c.Status(200).JSON(fiber.Map{"message": "product created successfully"})
 }
 
 // Update godoc
-// @Summary      Update Existing Product
+// @Summary      Update Product
 // @Tags         Products
 // @Accept       json
 // @Produce      json
-// @Param        id       path      int             true  "Product ID"
-// @Param        product  body      domain.ProductRequest  true  "Update Data"
+// @Param        id       path      int                    true  "Product ID"
+// @Param        product  body      domain.ProductRequestUpdate  true  "Product data"
 // @Success      200      {object}  map[string]string
 // @Failure      400      {object}  map[string]string
 // @Router       /products/{id} [put]
 func (h *ProductHandler) Update(c *fiber.Ctx) error {
 	id := c.Params("id")
-	var p domain.ProductRequestUpdate
-	if err := c.BodyParser(&p); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	var input domain.ProductRequestUpdate
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
-	if err := h.Service.Update(id, p); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+
+	if err := h.Service.Update(id, input); err != nil {
+		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
-	return c.Status(200).JSON(fiber.Map{"message": "Produk berhasil diperbarui"})
+
+	return c.Status(200).JSON(fiber.Map{"message": "product updated successfully"})
 }
 
 // Delete godoc
 // @Summary      Delete Product
 // @Tags         Products
+// @Produce      json
 // @Param        id   path      int  true  "Product ID"
 // @Success      200  {object}  map[string]string
+// @Failure      400  {object}  map[string]string
 // @Router       /products/{id} [delete]
 func (h *ProductHandler) Delete(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if err := h.Service.Delete(id); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
-	return c.Status(200).JSON(fiber.Map{"message": "Produk berhasil dihapus"})
+
+	return c.Status(200).JSON(fiber.Map{"message": "product deleted successfully"})
 }

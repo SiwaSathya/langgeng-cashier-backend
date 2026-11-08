@@ -99,6 +99,75 @@ func TestUserAndAttendanceService(t *testing.T) {
 	if total < 1 || len(list) < 1 {
 		t.Fatalf("expected at least 1 attendance item, got %d", len(list))
 	}
+
+	// 6. Test Live Clock-In and Clock-Out flow
+	clockUserReq := domain.UserRequest{
+		Name:     "Clockin Employee",
+		Username: fmt.Sprintf("clockuser_%d", time.Now().UnixNano()%100000),
+		Password: "password123",
+		Location: "Toko Utama",
+		Role:     "kasir",
+	}
+	clockUser, err := authSvc.CreateUser(clockUserReq)
+	if err != nil {
+		t.Fatalf("CreateUser for clockin failed: %v", err)
+	}
+	defer func() {
+		database.Unscoped().Where("user_id = ?", clockUser.ID).Delete(&domain.Attendance{})
+		database.Unscoped().Where("username = ?", clockUserReq.Username).Delete(&domain.User{})
+	}()
+
+	// Status before clock-in
+	statusBefore, err := attSvc.GetTodayAttendance(clockUser.ID)
+	if err != nil {
+		t.Fatalf("GetTodayAttendance before clockin failed: %v", err)
+	}
+	if statusBefore.HasAttended {
+		t.Fatalf("expected HasAttended = false before clock-in")
+	}
+
+	// Perform Clock-In
+	clockedIn, err := attSvc.ClockIn(domain.ClockInRequest{
+		UserID: clockUser.ID,
+		Shift:  1,
+		Notes:  "Mulai shift pagi",
+	})
+	if err != nil {
+		t.Fatalf("ClockIn failed: %v", err)
+	}
+	if clockedIn.CheckIn == nil {
+		t.Fatalf("expected non-nil CheckIn after clock-in")
+	}
+
+	// Status after clock-in
+	statusAfterIn, err := attSvc.GetTodayAttendance(clockUser.ID)
+	if err != nil {
+		t.Fatalf("GetTodayAttendance after clockin failed: %v", err)
+	}
+	if !statusAfterIn.HasAttended || statusAfterIn.HasClockedOut {
+		t.Fatalf("expected HasAttended = true, HasClockedOut = false after clock-in")
+	}
+
+	// Perform Clock-Out
+	clockedOut, err := attSvc.ClockOut(domain.ClockOutRequest{
+		UserID: clockUser.ID,
+		Notes:  "Shift selesai",
+	})
+	if err != nil {
+		t.Fatalf("ClockOut failed: %v", err)
+	}
+	if clockedOut.CheckOut == nil {
+		t.Fatalf("expected non-nil CheckOut after clock-out")
+	}
+
+	// Status after clock-out
+	statusAfterOut, err := attSvc.GetTodayAttendance(clockUser.ID)
+	if err != nil {
+		t.Fatalf("GetTodayAttendance after clockout failed: %v", err)
+	}
+	if !statusAfterOut.HasAttended || !statusAfterOut.HasClockedOut {
+		t.Fatalf("expected HasAttended = true, HasClockedOut = true after clock-out")
+	}
 }
 
 func TestAccountingService(t *testing.T) {
@@ -180,7 +249,7 @@ func TestAccountingService(t *testing.T) {
 	}
 
 	// 4. Test Rekapitulasi
-	recap, err := accSvc.GetRekapitulasi(todayStr, todayStr)
+	recap, err := accSvc.GetRekapitulasi(todayStr, todayStr, "")
 	if err != nil {
 		t.Fatalf("GetRekapitulasi failed: %v", err)
 	}
@@ -189,7 +258,7 @@ func TestAccountingService(t *testing.T) {
 	}
 
 	// 5. Test General Ledger
-	ledger, err := accSvc.GetGeneralLedger(todayStr, todayStr, kasAcc.ID)
+	ledger, err := accSvc.GetGeneralLedger(kasAcc.ID, todayStr, todayStr, "")
 	if err != nil {
 		t.Fatalf("GetGeneralLedger failed: %v", err)
 	}
@@ -228,7 +297,7 @@ func TestAccountingService(t *testing.T) {
 // 		CategoryID: category.ID,
 // 		BrandID:    brand.ID,
 // 	}
-// 	if err := database.Create(&prod).Error; err != nil {
+// 	if err := if err := database.Create(&prod).Error; err != nil { t.Fatalf("failed to create prod: %v", err) }.Error; err != nil {
 // 		t.Fatalf("failed to create test product: %v", err)
 // 	}
 // 	defer database.Unscoped().Delete(&prod)
@@ -359,7 +428,7 @@ func TestSalesDeleteWithStockRollback(t *testing.T) {
 
 	initialStock := float64(50)
 	prod := domain.Product{
-		Kode:       fmt.Sprintf("PROD-DEL-%d", time.Now().UnixNano()%100000),
+		Kode:       fmt.Sprintf("PROD-DEL-%d", time.Now().UnixNano()),
 		Nama:       "Produk Rollback Stock Test",
 		Saldo:      initialStock,
 		HBeli:      10000,
@@ -368,7 +437,7 @@ func TestSalesDeleteWithStockRollback(t *testing.T) {
 		CategoryID: category.ID,
 		BrandID:    brand.ID,
 	}
-	database.Create(&prod)
+	if err := database.Create(&prod).Error; err != nil { t.Fatalf("failed to create prod: %v", err) }
 	defer func() {
 		database.Unscoped().Where("product_id = ?", prod.ID).Delete(&domain.Sales{})
 		database.Unscoped().Delete(&prod)
@@ -444,7 +513,7 @@ func TestSalesDeleteWithStockRollback(t *testing.T) {
 // 		CategoryID: category.ID,
 // 		BrandID:    brand.ID,
 // 	}
-// 	database.Create(&prod)
+// 	if err := database.Create(&prod).Error; err != nil { t.Fatalf("failed to create prod: %v", err) }
 // 	defer database.Unscoped().Delete(&prod)
 
 // 	// 1. Create Sales of Rp 100.000 with DP Rp 40.000
@@ -499,3 +568,134 @@ func TestSalesDeleteWithStockRollback(t *testing.T) {
 // 		t.Fatalf("expected piutang saldo akhir 0 and status Lunas, got %f (%s)", pSettled.SaldoAkhir, pSettled.Status)
 // 	}
 // }
+
+func TestSalesCrucialFilters(t *testing.T) {
+	setupFeatureTestDB(t)
+	database := db.Postgres.DB
+
+	accSvc := service.NewAccountingService(database)
+	trxSvc := service.NewTransactionService(database, accSvc)
+
+	var supplier domain.Supplier
+	database.FirstOrCreate(&supplier, domain.Supplier{ID: "SUPP-FLT", Name: "Supplier Filter"})
+
+	var category domain.Category
+	database.FirstOrCreate(&category, domain.Category{Name: "Kategori Filter"})
+
+	var brand domain.Brand
+	database.FirstOrCreate(&brand, domain.Brand{Name: "Brand Filter"})
+
+	kasirID := fmt.Sprintf("USER-KASIR-%d", time.Now().UnixNano()%100000)
+	kasirName := fmt.Sprintf("Kasir Handal %d", time.Now().UnixNano()%10000)
+	user := domain.User{
+		ID:       kasirID,
+		Name:     kasirName,
+		Username: fmt.Sprintf("kasirflt_%d", time.Now().UnixNano()%100000),
+		Role:     "kasir",
+		Location: "Toko Utama",
+	}
+	database.Create(&user)
+	defer database.Unscoped().Delete(&user)
+
+	prod := domain.Product{
+		Kode:       fmt.Sprintf("PROD-FLT-%d", time.Now().UnixNano()),
+		Nama:       "TV LED Smart 43 Inch Filter Test",
+		Saldo:      50,
+		HBeli:      2000000,
+		HJual:      3500000,
+		SupplierID: supplier.ID,
+		CategoryID: category.ID,
+		BrandID:    brand.ID,
+	}
+	if err := database.Create(&prod).Error; err != nil {
+		t.Fatalf("failed to create test prod: %v", err)
+	}
+	defer database.Unscoped().Delete(&prod)
+
+	// Buat transaksi 1: Shift 1, Lunas, Tunai, Member "Budi Santoso"
+	trx1, err := trxSvc.CreateSales(domain.CreateTransactionRequest{
+		Location:      "Toko Utama",
+		UserID:        user.ID,
+		MemberName:    "Budi Santoso",
+		PaymentMethod: "Tunai",
+		AmountPaid:    3500000,
+		Items: []domain.SalesItemRequest{
+			{ProductSearch: prod.Kode, Qty: 1, Price: 3500000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSales 1 failed: %v", err)
+	}
+	defer func() {
+		database.Unscoped().Where("sales_id IN (SELECT id FROM sales WHERE invoice = ?)", trx1.Invoice).Delete(&domain.PaymentMethod{})
+		database.Unscoped().Where("invoice = ?", trx1.Invoice).Delete(&domain.Sales{})
+		database.Unscoped().Where("entry_number = ?", "JV-SALES-"+trx1.Invoice).Delete(&domain.JournalEntry{})
+	}()
+
+	// Update Shift menjadi 1 untuk trx1
+	shift1 := uint(1)
+	database.Model(&domain.Sales{}).Where("invoice = ?", trx1.Invoice).Update("shift", shift1)
+
+	// 1. Test Filter Invoice Spesifik
+	fInv := domain.SalesFilter{Invoice: trx1.Invoice, Page: 1, Limit: 10}
+	resInv, totalInv, err := trxSvc.GetPaginatedSales(fInv)
+	if err != nil {
+		t.Fatalf("GetPaginatedSales with invoice filter failed: %v", err)
+	}
+	if totalInv != 1 || len(resInv) != 1 || resInv[0].Invoice != trx1.Invoice {
+		t.Fatalf("expected 1 result for invoice filter, got %d", totalInv)
+	}
+
+	// 2. Test Global Search (Mencocokkan nama barang)
+	fSearchProd := domain.SalesFilter{Search: "LED Smart 43", Page: 1, Limit: 10}
+	resSearchProd, totalSearchProd, err := trxSvc.GetPaginatedSales(fSearchProd)
+	if err != nil {
+		t.Fatalf("GetPaginatedSales with search prod failed: %v", err)
+	}
+	if totalSearchProd < 1 || len(resSearchProd) < 1 {
+		t.Fatalf("expected search to find transaction by product name, got %d", totalSearchProd)
+	}
+
+	// 3. Test Global Search (Mencocokkan nama pelanggan)
+	fSearchMember := domain.SalesFilter{Search: "Budi Santoso", Page: 1, Limit: 10}
+	resSearchMember, totalSearchMember, err := trxSvc.GetPaginatedSales(fSearchMember)
+	if err != nil {
+		t.Fatalf("GetPaginatedSales with search member failed: %v", err)
+	}
+	if totalSearchMember < 1 || len(resSearchMember) < 1 {
+		t.Fatalf("expected search to find transaction by member name, got %d", totalSearchMember)
+	}
+
+	// 4. Test Filter Shift Kasir (Shift 1 harus match, Shift 2 tidak)
+	fShift1 := domain.SalesFilter{Invoice: trx1.Invoice, Shift: 1}
+	_, totalShift1, err := trxSvc.GetPaginatedSales(fShift1)
+	if err != nil || totalShift1 != 1 {
+		t.Fatalf("expected total 1 for shift 1, got %d (err: %v)", totalShift1, err)
+	}
+
+	fShift2 := domain.SalesFilter{Invoice: trx1.Invoice, Shift: 2}
+	_, totalShift2, err := trxSvc.GetPaginatedSales(fShift2)
+	if err != nil || totalShift2 != 0 {
+		t.Fatalf("expected total 0 for shift 2, got %d (err: %v)", totalShift2, err)
+	}
+
+	// 5. Test Filter Status Pembayaran
+	fStatusLunas := domain.SalesFilter{Invoice: trx1.Invoice, Status: "Lunas"}
+	_, totalLunas, err := trxSvc.GetPaginatedSales(fStatusLunas)
+	if err != nil || totalLunas != 1 {
+		t.Fatalf("expected total 1 for status Lunas, got %d (err: %v)", totalLunas, err)
+	}
+
+	fStatusBon := domain.SalesFilter{Invoice: trx1.Invoice, Status: "Belum Lunas"}
+	_, totalBon, err := trxSvc.GetPaginatedSales(fStatusBon)
+	if err != nil || totalBon != 0 {
+		t.Fatalf("expected total 0 for status Belum Lunas, got %d (err: %v)", totalBon, err)
+	}
+
+	// 6. Test Filter Metode Pembayaran
+	fMethod := domain.SalesFilter{Invoice: trx1.Invoice, Method: "Tunai"}
+	_, totalMethod, err := trxSvc.GetPaginatedSales(fMethod)
+	if err != nil || totalMethod != 1 {
+		t.Fatalf("expected total 1 for method Tunai, got %d (err: %v)", totalMethod, err)
+	}
+}

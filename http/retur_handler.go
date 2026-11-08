@@ -2,9 +2,12 @@ package http
 
 import (
 	"backend-cashier/service"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v4"
 )
 
 type ReturHandler struct {
@@ -25,6 +28,50 @@ func (h *ReturHandler) RegisterRoutes(router fiber.Router) {
 	api.Put("/retur/:id/selesai", h.CompleteRetur)
 }
 
+// Helper untuk mengekstrak identitas user dari JWT Token atau custom header
+func extractReturUser(c *fiber.Ctx) (*string, string, string) {
+	// 1. Cek JWT Bearer Authorization header
+	authHeader := c.Get("Authorization")
+	if authHeader != "" {
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		tokenStr = strings.TrimSpace(tokenStr)
+		if tokenStr != "" {
+			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+				return []byte("smartpos_secret_key"), nil
+			})
+			if err == nil && token != nil {
+				if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+					var userID *string
+					if uid, exists := claims["user_id"]; exists && uid != nil {
+						strUID := fmt.Sprintf("%v", uid)
+						if strUID != "" && strUID != "<nil>" {
+							userID = &strUID
+						}
+					}
+					var userName string
+					if n, exists := claims["name"]; exists && n != nil {
+						userName = fmt.Sprintf("%v", n)
+					}
+					var userRole string
+					if r, exists := claims["role"]; exists && r != nil {
+						userRole = fmt.Sprintf("%v", r)
+					}
+					return userID, userName, userRole
+				}
+			}
+		}
+	}
+
+	// 2. Cek Custom Request Headers
+	if hID := c.Get("X-User-Id"); hID != "" {
+		hName := c.Get("X-User-Name")
+		hRole := c.Get("X-User-Role")
+		return &hID, hName, hRole
+	}
+
+	return nil, "", ""
+}
+
 func (h *ReturHandler) PostRetur(c *fiber.Ctx) error {
 	var req service.ReturRequest
 
@@ -32,6 +79,18 @@ func (h *ReturHandler) PostRetur(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Format data tidak valid: " + err.Error(),
 		})
+	}
+
+	// Auto-enrich user identity jika belum disediakan di payload body
+	tokenUID, tokenName, tokenRole := extractReturUser(c)
+	if req.UserID == nil && tokenUID != nil {
+		req.UserID = tokenUID
+	}
+	if req.UserName == "" && tokenName != "" {
+		req.UserName = tokenName
+	}
+	if req.UserRole == "" && tokenRole != "" {
+		req.UserRole = tokenRole
 	}
 
 	if req.Status == "" {
@@ -58,6 +117,18 @@ func (h *ReturHandler) PostDirectRetur(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Format data tidak valid: " + err.Error(),
 		})
+	}
+
+	// Auto-enrich user identity jika belum disediakan di payload body
+	tokenUID, tokenName, tokenRole := extractReturUser(c)
+	if req.UserID == nil && tokenUID != nil {
+		req.UserID = tokenUID
+	}
+	if req.UserName == "" && tokenName != "" {
+		req.UserName = tokenName
+	}
+	if req.UserRole == "" && tokenRole != "" {
+		req.UserRole = tokenRole
 	}
 
 	if req.Status == "" {

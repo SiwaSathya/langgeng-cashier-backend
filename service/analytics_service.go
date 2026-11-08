@@ -21,7 +21,13 @@ func NewAnalyticsService(db *gorm.DB) *AnalyticsService {
 	return &AnalyticsService{DB: db}
 }
 
-func (s *AnalyticsService) GetAnalyticsReport(period string) (*domain.AnalyticsReportResponse, error) {
+func (s *AnalyticsService) GetAnalyticsReport(period string, locations ...string) (*domain.AnalyticsReportResponse, error) {
+	location := ""
+	if len(locations) > 0 {
+		location = strings.TrimSpace(locations[0])
+	}
+	isFilteredLocation := location != "" && !strings.EqualFold(location, "Semua Toko") && !strings.EqualFold(location, "All")
+
 	now := time.Now()
 	var startDate, endDate string
 
@@ -48,31 +54,40 @@ func (s *AnalyticsService) GetAnalyticsReport(period string) (*domain.AnalyticsR
 	startFull := startDate + " 00:00:00"
 	endFull := endDate + " 23:59:59"
 
-	// 1. KPI: Total Omset & Qty Penjualan
+	// 1. KPI: Total Omset & Qty Penjualan (exclude retur)
 	var totalOmset, totalQty float64
 	var totalTransaksi int64
 
-	s.DB.Model(&domain.Sales{}).
-		Where("created_at BETWEEN ? AND ?", startFull, endFull).
-		Select("COALESCE(SUM(total_netto), 0) as total_omset, COALESCE(SUM(qty), 0) as total_qty").
+	salesKpiQuery := s.DB.Model(&domain.Sales{}).
+		Where("created_at BETWEEN ? AND ? AND is_returs = ?", startFull, endFull, false)
+	if isFilteredLocation {
+		salesKpiQuery = salesKpiQuery.Where("location = ?", location)
+	}
+	salesKpiQuery.Select("COALESCE(SUM(total_netto), 0) as total_omset, COALESCE(SUM(qty), 0) as total_qty").
 		Row().Scan(&totalOmset, &totalQty)
 
-	s.DB.Model(&domain.Sales{}).
-		Where("created_at BETWEEN ? AND ?", startFull, endFull).
-		Distinct("invoice").
-		Count(&totalTransaksi)
+	salesCountQuery := s.DB.Model(&domain.Sales{}).
+		Where("created_at BETWEEN ? AND ? AND is_returs = ?", startFull, endFull, false)
+	if isFilteredLocation {
+		salesCountQuery = salesCountQuery.Where("location = ?", location)
+	}
+	salesCountQuery.Distinct("invoice").Count(&totalTransaksi)
 
 	// 2. KPI: Total Pengeluaran (Expense + Purchase)
 	var totalExpense, totalPurchase float64
-	s.DB.Model(&domain.Expense{}).
-		Where("created_at BETWEEN ? AND ? OR tanggal BETWEEN ? AND ?", startFull, endFull, startFull, endFull).
-		Select("COALESCE(SUM(total), 0)").
-		Scan(&totalExpense)
+	expQuery := s.DB.Model(&domain.Expense{}).
+		Where("(created_at BETWEEN ? AND ? OR tanggal BETWEEN ? AND ?)", startFull, endFull, startFull, endFull)
+	if isFilteredLocation {
+		expQuery = expQuery.Where("location = ?", location)
+	}
+	expQuery.Select("COALESCE(SUM(total), 0)").Scan(&totalExpense)
 
-	s.DB.Model(&domain.Purchase{}).
-		Where("created_at BETWEEN ? AND ? OR tanggal BETWEEN ? AND ?", startFull, endFull, startFull, endFull).
-		Select("COALESCE(SUM(total), 0)").
-		Scan(&totalPurchase)
+	purchQuery := s.DB.Model(&domain.Purchase{}).
+		Where("(created_at BETWEEN ? AND ? OR tanggal BETWEEN ? AND ?)", startFull, endFull, startFull, endFull)
+	if isFilteredLocation {
+		purchQuery = purchQuery.Where("location = ?", location)
+	}
+	purchQuery.Select("COALESCE(SUM(total), 0)").Scan(&totalPurchase)
 
 	totalPengeluaran := totalExpense + totalPurchase
 	profit := totalOmset - totalPengeluaran
@@ -87,22 +102,27 @@ func (s *AnalyticsService) GetAnalyticsReport(period string) (*domain.AnalyticsR
 		dStart := dateStr + " 00:00:00"
 		dEnd := dateStr + " 23:59:59"
 
-		var daySales, dayExpense float64
-		s.DB.Model(&domain.Sales{}).
-			Where("created_at BETWEEN ? AND ?", dStart, dEnd).
-			Select("COALESCE(SUM(total_netto), 0)").
-			Scan(&daySales)
+		var daySales, dayExpense, dayPurchase float64
+		dsQ := s.DB.Model(&domain.Sales{}).
+			Where("created_at BETWEEN ? AND ? AND is_returs = ?", dStart, dEnd, false)
+		if isFilteredLocation {
+			dsQ = dsQ.Where("location = ?", location)
+		}
+		dsQ.Select("COALESCE(SUM(total_netto), 0)").Scan(&daySales)
 
-		s.DB.Model(&domain.Expense{}).
-			Where("created_at BETWEEN ? AND ? OR tanggal BETWEEN ? AND ?", dStart, dEnd, dStart, dEnd).
-			Select("COALESCE(SUM(total), 0)").
-			Scan(&dayExpense)
+		deQ := s.DB.Model(&domain.Expense{}).
+			Where("(created_at BETWEEN ? AND ? OR tanggal BETWEEN ? AND ?)", dStart, dEnd, dStart, dEnd)
+		if isFilteredLocation {
+			deQ = deQ.Where("location = ?", location)
+		}
+		deQ.Select("COALESCE(SUM(total), 0)").Scan(&dayExpense)
 
-		var dayPurchase float64
-		s.DB.Model(&domain.Purchase{}).
-			Where("created_at BETWEEN ? AND ? OR tanggal BETWEEN ? AND ?", dStart, dEnd, dStart, dEnd).
-			Select("COALESCE(SUM(total), 0)").
-			Scan(&dayPurchase)
+		dpQ := s.DB.Model(&domain.Purchase{}).
+			Where("(created_at BETWEEN ? AND ? OR tanggal BETWEEN ? AND ?)", dStart, dEnd, dStart, dEnd)
+		if isFilteredLocation {
+			dpQ = dpQ.Where("location = ?", location)
+		}
+		dpQ.Select("COALESCE(SUM(total), 0)").Scan(&dayPurchase)
 
 		trends = append(trends, domain.DailyTrendItem{
 			Date:        dateStr,
@@ -114,25 +134,31 @@ func (s *AnalyticsService) GetAnalyticsReport(period string) (*domain.AnalyticsR
 
 	// 4. Payment Method Breakdown
 	var paymentMethods []domain.PaymentMethodShare
-	s.DB.Model(&domain.Sales{}).
-		Where("created_at BETWEEN ? AND ?", startFull, endFull).
-		Select("payment_method as method, SUM(total_netto) as total, COUNT(DISTINCT invoice) as count").
+	pmQ := s.DB.Model(&domain.Sales{}).
+		Where("created_at BETWEEN ? AND ? AND is_returs = ?", startFull, endFull, false)
+	if isFilteredLocation {
+		pmQ = pmQ.Where("location = ?", location)
+	}
+	pmQ.Select("payment_method as method, SUM(total_netto) as total, COUNT(DISTINCT invoice) as count").
 		Group("payment_method").
 		Order("total desc").
 		Scan(&paymentMethods)
 
 	// 5. Top 5 Produk Terlaris
 	var topProducts []domain.TopProductItem
-	s.DB.Table("sales").
+	tpQ := s.DB.Table("sales").
 		Select("products.id as product_id, products.nama as product_name, products.kode as product_code, SUM(sales.qty) as total_qty, SUM(sales.total_netto) as total_omset").
 		Joins("JOIN products ON products.id = sales.product_id").
-		Where("sales.created_at BETWEEN ? AND ?", startFull, endFull).
-		Group("products.id, products.nama, products.kode").
+		Where("sales.created_at BETWEEN ? AND ? AND sales.is_returs = ?", startFull, endFull, false)
+	if isFilteredLocation {
+		tpQ = tpQ.Where("sales.location = ?", location)
+	}
+	tpQ.Group("products.id, products.nama, products.kode").
 		Order("total_qty desc, total_omset desc").
 		Limit(5).
 		Scan(&topProducts)
 
-	// 6. Produk Stok Kritis (Saldo <= 2)
+	// 6. Produk Stok Kritis (Saldo <= 2) dengan info HBeli untuk kalkulasi budget restock
 	var criticalStocks []domain.CriticalStockItem
 	var products []domain.Product
 	s.DB.Preload("Category").Where("saldo <= ?", 2).Order("saldo asc").Limit(10).Find(&products)
@@ -151,18 +177,23 @@ func (s *AnalyticsService) GetAnalyticsReport(period string) (*domain.AnalyticsR
 			ProductCode: p.Kode,
 			Category:    catName,
 			Saldo:       p.Saldo,
+			HBeli:       p.HBeli,
+			HJual:       p.HJual,
 			Status:      status,
 		})
 	}
 
 	// 7. Category Margin Breakdown
 	var categoryMargins []domain.CategoryMarginItem
-	s.DB.Table("sales").
+	cmQ := s.DB.Table("sales").
 		Select("categories.id as category_id, categories.name as category_name, SUM(sales.total_netto) as omset_kotor, SUM(sales.h_beli * sales.qty) as hpp, SUM(sales.total_netto - (sales.h_beli * sales.qty)) as profit").
 		Joins("JOIN products ON products.id = sales.product_id").
 		Joins("JOIN categories ON categories.id = products.category_id").
-		Where("sales.created_at BETWEEN ? AND ?", startFull, endFull).
-		Group("categories.id, categories.name").
+		Where("sales.created_at BETWEEN ? AND ? AND sales.is_returs = ?", startFull, endFull, false)
+	if isFilteredLocation {
+		cmQ = cmQ.Where("sales.location = ?", location)
+	}
+	cmQ.Group("categories.id, categories.name").
 		Order("omset_kotor desc").
 		Scan(&categoryMargins)
 
@@ -174,11 +205,14 @@ func (s *AnalyticsService) GetAnalyticsReport(period string) (*domain.AnalyticsR
 
 	// 8. Staff Leaderboard
 	var staffLeaderboard []domain.StaffPerformanceItem
-	s.DB.Table("sales").
+	slQ := s.DB.Table("sales").
 		Select("sales.user_id as user_id, COALESCE(users.name, sales.member_name, 'Kasir') as staff_name, COALESCE(users.location, 'Toko Utama') as location, SUM(sales.total_netto) as total_omset, COUNT(DISTINCT sales.invoice) as total_transaksi").
 		Joins("LEFT JOIN users ON users.id = sales.user_id").
-		Where("sales.created_at BETWEEN ? AND ?", startFull, endFull).
-		Group("sales.user_id, users.name, sales.member_name, users.location").
+		Where("sales.created_at BETWEEN ? AND ? AND sales.is_returs = ?", startFull, endFull, false)
+	if isFilteredLocation {
+		slQ = slQ.Where("sales.location = ? OR users.location = ?", location, location)
+	}
+	slQ.Group("sales.user_id, users.name, sales.member_name, users.location").
 		Order("total_omset desc").
 		Limit(5).
 		Scan(&staffLeaderboard)
@@ -199,10 +233,12 @@ func (s *AnalyticsService) GetAnalyticsReport(period string) (*domain.AnalyticsR
 	hoursList := []int{8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}
 	for _, h := range hoursList {
 		var count int64
-		s.DB.Model(&domain.Sales{}).
-			Where("created_at BETWEEN ? AND ? AND EXTRACT(HOUR FROM created_at) = ?", startFull, endFull, h).
-			Distinct("invoice").
-			Count(&count)
+		phQ := s.DB.Model(&domain.Sales{}).
+			Where("created_at BETWEEN ? AND ? AND is_returs = ? AND EXTRACT(HOUR FROM created_at) = ?", startFull, endFull, false, h)
+		if isFilteredLocation {
+			phQ = phQ.Where("location = ?", location)
+		}
+		phQ.Distinct("invoice").Count(&count)
 
 		peakHours = append(peakHours, domain.PeakHourItem{
 			Hour:  fmt.Sprintf("%02d:00", h),
@@ -213,8 +249,14 @@ func (s *AnalyticsService) GetAnalyticsReport(period string) (*domain.AnalyticsR
 	// 10. AI SWOT Analysis
 	swot := s.GenerateSWOTAnalysis(categoryMargins)
 
+	locOutput := location
+	if locOutput == "" {
+		locOutput = "Semua Toko"
+	}
+
 	return &domain.AnalyticsReportResponse{
-		Period: period,
+		Period:   period,
+		Location: locOutput,
 		KPI: domain.AnalyticsKPISummary{
 			TotalOmset:       totalOmset,
 			TotalPengeluaran: totalPengeluaran,

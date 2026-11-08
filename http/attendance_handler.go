@@ -22,6 +22,9 @@ func (h *AttendanceHandler) RegisterRoutes(app *fiber.App) {
 	api.Post("/attendance", h.CreateAttendance)
 	api.Get("/attendance", h.GetAllAttendance)
 	api.Get("/attendance/summary", h.GetSummary)
+	api.Get("/attendance/today/:user_id", h.GetTodayAttendance)
+	api.Post("/attendance/clock-in", h.ClockIn)
+	api.Post("/attendance/clock-out", h.ClockOut)
 	api.Get("/attendance/:id", h.GetByID)
 	api.Put("/attendance/:id", h.UpdateAttendance)
 	api.Delete("/attendance/:id", h.DeleteAttendance)
@@ -46,6 +49,60 @@ func (h *AttendanceHandler) CreateAttendance(c *fiber.Ctx) error {
 		"message": "Data absensi berhasil disimpan",
 		"data":    result,
 	})
+}
+
+func (h *AttendanceHandler) ClockIn(c *fiber.Ctx) error {
+	var req domain.ClockInRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Format request tidak valid: " + err.Error(),
+		})
+	}
+
+	result, err := h.Service.ClockIn(req)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(201).JSON(fiber.Map{
+		"message": "Absen masuk berhasil dicatat. Selamat bertugas!",
+		"data":    result,
+	})
+}
+
+func (h *AttendanceHandler) ClockOut(c *fiber.Ctx) error {
+	var req domain.ClockOutRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Format request tidak valid: " + err.Error(),
+		})
+	}
+
+	result, err := h.Service.ClockOut(req)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Absen pulang berhasil dicatat. Terima kasih atas kerja keras Anda hari ini!",
+		"data":    result,
+	})
+}
+
+func (h *AttendanceHandler) GetTodayAttendance(c *fiber.Ctx) error {
+	userID := c.Params("user_id")
+	status, err := h.Service.GetTodayAttendance(userID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(status)
 }
 
 func (h *AttendanceHandler) GetAllAttendance(c *fiber.Ctx) error {

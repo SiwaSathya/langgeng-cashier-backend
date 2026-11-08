@@ -144,12 +144,20 @@ type SalesTransactionGroup struct {
 
 // Struct untuk filter Sales
 type SalesFilter struct {
-	StartDate    string `query:"start_date"`
-	EndDate      string `query:"end_date"`
-	Member       string `query:"member"`
-	Method       string `query:"method"`
-	Location     string `query:"location"`
-	UserLocation string `query:"user_location"`
+	StartDate     string `query:"start_date"`
+	EndDate       string `query:"end_date"`
+	Member        string `query:"member"`
+	Method        string `query:"method"`
+	Location      string `query:"location"`
+	UserLocation  string `query:"user_location"`
+	Page          int    `query:"page"`
+	Limit         int    `query:"limit"`
+	Invoice       string `query:"invoice"`
+	Status        string `query:"status"`
+	Shift         uint   `query:"shift"`
+	Kasir         string `query:"kasir"`
+	ProductSearch string `query:"product_search"`
+	Search        string `query:"search"`
 }
 
 type UpdateShiftRequest struct {

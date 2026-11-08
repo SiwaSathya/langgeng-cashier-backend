@@ -5,6 +5,7 @@ import (
 	"backend-cashier/service"
 	"bytes"
 	"encoding/json"
+	"math"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -237,20 +238,73 @@ func (h *TransactionHandler) CreateSales(c *fiber.Ctx) error {
 // @Failure      500        {object}  map[string]string
 // @Router       /api/sales [get]
 func (h *TransactionHandler) GetSales(c *fiber.Ctx) error {
-	start := c.Query("start_date")
-	end := c.Query("end_date")
-	member := c.Query("member")
-	method := c.Query("method")
-	location := c.Query("location")
-	userLocation := c.Query("user_location")
+	var filter domain.SalesFilter
+	if err := c.QueryParser(&filter); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Parameter filter tidak valid"})
+	}
 
-	filter := domain.SalesFilter{
-		StartDate:    start,
-		EndDate:      end,
-		Member:       member,
-		Method:       method,
-		Location:     location,
-		UserLocation: userLocation,
+	// Ambil query param manual jika query parser melewatkan string kosong/default
+	if filter.StartDate == "" {
+		filter.StartDate = c.Query("start_date")
+	}
+	if filter.EndDate == "" {
+		filter.EndDate = c.Query("end_date")
+	}
+	if filter.Member == "" {
+		filter.Member = c.Query("member")
+	}
+	if filter.Method == "" {
+		filter.Method = c.Query("method")
+	}
+	if filter.Location == "" {
+		filter.Location = c.Query("location")
+	}
+	if filter.UserLocation == "" {
+		filter.UserLocation = c.Query("user_location")
+	}
+	if filter.Invoice == "" {
+		filter.Invoice = c.Query("invoice")
+	}
+	if filter.Status == "" {
+		filter.Status = c.Query("status")
+	}
+	if filter.Shift == 0 {
+		if sVal := c.Query("shift"); sVal != "" {
+			if sInt, err := strconv.Atoi(sVal); err == nil && sInt > 0 {
+				filter.Shift = uint(sInt)
+			}
+		}
+	}
+	if filter.Kasir == "" {
+		filter.Kasir = c.Query("kasir")
+	}
+	if filter.ProductSearch == "" {
+		filter.ProductSearch = c.Query("product_search")
+	}
+	if filter.Search == "" {
+		filter.Search = c.Query("search")
+	}
+
+	isPaginated := c.Query("page") != "" || c.Query("limit") != ""
+	if isPaginated {
+		if filter.Limit <= 0 {
+			filter.Limit = 20
+		}
+		if filter.Page <= 0 {
+			filter.Page = 1
+		}
+		groups, total, err := h.Service.GetPaginatedSales(filter)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		totalPages := int(math.Ceil(float64(total) / float64(filter.Limit)))
+		return c.JSON(fiber.Map{
+			"data":        groups,
+			"total":       total,
+			"page":        filter.Page,
+			"limit":       filter.Limit,
+			"total_pages": totalPages,
+		})
 	}
 
 	results, err := h.Service.GetAllSales(filter)

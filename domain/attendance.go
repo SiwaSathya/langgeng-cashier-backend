@@ -11,7 +11,7 @@ type Attendance struct {
 	UserID   string     `gorm:"size:100;index" json:"user_id"`
 	User     User       `gorm:"foreignKey:UserID" json:"user"`
 	Date     time.Time  `gorm:"index" json:"date"`
-	Shift    uint       `json:"shift"` // 1, 2, 3
+	Shift    uint       `json:"shift"`                 // 1, 2, 3
 	Status   string     `gorm:"size:50" json:"status"` // Pagi, Siang, Libur, Lembur, Bantu, Sakit, Dispensasi
 	CheckIn  *time.Time `json:"check_in"`
 	CheckOut *time.Time `json:"check_out"`
@@ -49,4 +49,23 @@ type AttendanceSummary struct {
 	Sakit      int64 `json:"sakit"`
 	Dispensasi int64 `json:"dispensasi"`
 	Total      int64 `json:"total"`
+}
+
+type ClockInRequest struct {
+	UserID string `json:"user_id"`
+	Shift  uint   `json:"shift"` // 1 = Pagi, 2 = Siang
+	Notes  string `json:"notes"`
+}
+
+type ClockOutRequest struct {
+	UserID string `json:"user_id"`
+	Notes  string `json:"notes"`
+}
+
+type TodayAttendanceStatus struct {
+	HasAttended   bool        `json:"has_attended"`
+	HasClockedOut bool        `json:"has_clocked_out"`
+	Attendance    *Attendance `json:"attendance"`
+	Date          string      `json:"date"`
+	ServerTime    string      `json:"server_time"`
 }
