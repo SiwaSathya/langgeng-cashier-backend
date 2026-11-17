@@ -5,10 +5,14 @@ import (
 	"backend-cashier/service"
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v4"
 )
 
 // SalesRequest mendefinisikan input untuk kasir
@@ -36,17 +40,54 @@ type ExpenditureRequest struct {
 }
 
 type TransactionHandler struct {
-	Service *service.TransactionService
+	Service     *service.TransactionService
+	AuthService *service.AuthService
 }
 
-func NewTransactionHandler(s *service.TransactionService) *TransactionHandler {
-	return &TransactionHandler{Service: s}
+func NewTransactionHandler(s *service.TransactionService, auth ...*service.AuthService) *TransactionHandler {
+	h := &TransactionHandler{Service: s}
+	if len(auth) > 0 {
+		h.AuthService = auth[0]
+	}
+	return h
+}
+
+func (h *TransactionHandler) parseClaims(c *fiber.Ctx) (jwt.MapClaims, error) {
+	authHeader := c.Get("Authorization")
+	if authHeader == "" {
+		authHeader = c.Query("token")
+	}
+	if authHeader == "" {
+		return nil, errors.New("token otentikasi tidak ditemukan")
+	}
+
+	tokenStr := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+	if h.AuthService != nil && h.AuthService.IsTokenRevoked(tokenStr) {
+		return nil, errors.New("token telah dicabut (revoked), silakan login kembali")
+	}
+
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("alg signing invalid")
+		}
+		return service.GetJWTSecret(), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, errors.New("token otentikasi tidak valid atau telah kedaluwarsa")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("claims token tidak valid")
+	}
+	return claims, nil
 }
 
 func (h *TransactionHandler) RegisterRoutes(app *fiber.App) {
 	api := app.Group("/api")
 	api.Post("/sales", h.CreateSales)
 	api.Get("/sales", h.GetSales)
+	api.Get("/sales/live", h.LiveSales)
 
 	api.Post("/expenditure", h.CreateExpenditure)
 	api.Get("/expenditure", h.GetExpenditure)
@@ -137,14 +178,7 @@ func (h *TransactionHandler) GetReceipt(
 		)
 	}
 
-	return c.JSON(
-		domain.ReceiptResponse{
-			Category: results.Category,
-			Location: results.Location,
-			Sales:    results.Sales,
-			Expenses: results.Expenses,
-		},
-	)
+	return c.JSON(results)
 }
 
 // CreateSales godoc
@@ -399,6 +433,33 @@ func (h *TransactionHandler) PutPelunasanSales(c *fiber.Ctx) error {
 		})
 	}
 
+	// Verifikasi Keamanan IDOR / BOLA (Broken Object Level Authorization)
+	if claims, err := h.parseClaims(c); err == nil && claims != nil {
+		userRole := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", claims["role"])))
+		normalizedRole := strings.ReplaceAll(strings.ReplaceAll(userRole, "-", ""), "_", "")
+		if normalizedRole != "superadmin" && normalizedRole != "admin" {
+			userLocation := strings.TrimSpace(fmt.Sprintf("%v", claims["location"]))
+			if userLocation == "" || strings.EqualFold(userLocation, "Pusat") {
+				userLocation = "Toko Utama"
+			}
+
+			sale, errSale := h.Service.GetSaleByIdentifier(identifier)
+			if errSale == nil && sale != nil {
+				saleLoc := strings.TrimSpace(sale.Location)
+				if saleLoc == "" || strings.EqualFold(saleLoc, "Pusat") {
+					saleLoc = "Toko Utama"
+				}
+
+				if !strings.EqualFold(saleLoc, userLocation) {
+					return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+						"error": fmt.Sprintf("Akses Ditolak (BOLA/IDOR Prevention): Anda tidak memiliki izin untuk melunasi nota transaksi dari lokasi cabang lain (%s)", sale.Location),
+						"code":  "BOLA_IDOR_VIOLATION",
+					})
+				}
+			}
+		}
+	}
+
 	var req domain.PelunasanRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -448,6 +509,45 @@ func (h *TransactionHandler) DeleteSales(c *fiber.Ctx) error {
 		})
 	}
 
+	// 1. Verifikasi Keamanan IDOR / BOLA (Broken Object Level Authorization)
+	claims, errClaims := h.parseClaims(c)
+	if h.AuthService != nil && errClaims != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Otentikasi diperlukan untuk membatalkan nota transaksi: " + errClaims.Error(),
+			"code":  "AUTH_REQUIRED",
+		})
+	}
+
+	if claims != nil {
+		userRole := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", claims["role"])))
+		normalizedRole := strings.ReplaceAll(strings.ReplaceAll(userRole, "-", ""), "_", "")
+		if normalizedRole != "superadmin" && normalizedRole != "admin" {
+			userLocation := strings.TrimSpace(fmt.Sprintf("%v", claims["location"]))
+			if userLocation == "" || strings.EqualFold(userLocation, "Pusat") {
+				userLocation = "Toko Utama"
+			}
+
+			sale, errSale := h.Service.GetSaleByIdentifier(identifier)
+			if errSale != nil {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "Data transaksi tidak ditemukan",
+				})
+			}
+
+			saleLoc := strings.TrimSpace(sale.Location)
+			if saleLoc == "" || strings.EqualFold(saleLoc, "Pusat") {
+				saleLoc = "Toko Utama"
+			}
+
+			if !strings.EqualFold(saleLoc, userLocation) {
+				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+					"error": fmt.Sprintf("Akses Ditolak (BOLA/IDOR Prevention): Anda tidak memiliki izin untuk membatalkan nota dari lokasi cabang lain (%s)", sale.Location),
+					"code":  "BOLA_IDOR_VIOLATION",
+				})
+			}
+		}
+	}
+
 	if err := h.Service.DeleteSales(identifier); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -457,4 +557,32 @@ func (h *TransactionHandler) DeleteSales(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "Transaksi berhasil dibatalkan dan seluruh stok produk telah dikembalikan",
 	})
+}
+
+// LiveSales menyiarkan event transaksi penjualan dan retur secara real-time via SSE dengan isolasi outlet (Cross-Store Data Leakage Prevention)
+func (h *TransactionHandler) LiveSales(c *fiber.Ctx) error {
+	topic := "sales:live"
+	locationQuery := strings.TrimSpace(c.Query("location"))
+
+	if claims, err := h.parseClaims(c); err == nil && claims != nil {
+		userRole := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", claims["role"])))
+		normalizedRole := strings.ReplaceAll(strings.ReplaceAll(userRole, "-", ""), "_", "")
+
+		if normalizedRole != "superadmin" && normalizedRole != "admin" {
+			// Kasir cabang hanya boleh menerima stream penjualan di cabangnya sendiri
+			userLoc := strings.TrimSpace(fmt.Sprintf("%v", claims["location"]))
+			if userLoc == "" || strings.EqualFold(userLoc, "Pusat") {
+				userLoc = "Toko Utama"
+			}
+			topic = "sales:live:" + userLoc
+		} else if locationQuery != "" && !strings.EqualFold(locationQuery, "Semua Toko") {
+			// Admin / Super Admin memilih filter outlet tertentu
+			if strings.EqualFold(locationQuery, "Pusat") {
+				locationQuery = "Toko Utama"
+			}
+			topic = "sales:live:" + locationQuery
+		}
+	}
+
+	return StreamSSE(c, service.GetGlobalSSE(), topic)
 }

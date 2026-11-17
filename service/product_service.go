@@ -29,6 +29,7 @@ func (s *ProductService) GetAll(search string, page int, limit int) ([]domain.Pr
 		Preload("Category").
 		Preload("Brand").
 		Preload("Supplier").
+		Preload("Stocks").
 		Order("id desc")
 
 	if search != "" {
@@ -64,7 +65,21 @@ func (s *ProductService) Update(id string, p domain.ProductRequestUpdate) error 
 		return errors.New("produk tidak ditemukan")
 	}
 
-	return s.DB.Model(&product).Updates(p).Error
+	if err := s.DB.Model(&product).Updates(p).Error; err != nil {
+		return err
+	}
+
+	if globalSSE != nil {
+		globalSSE.Broadcast("products:stock", "product_updated", map[string]interface{}{
+			"product_id": product.ID,
+			"nama":       product.Nama,
+			"kode":       product.Kode,
+			"saldo":      product.Saldo,
+			"hjual":      product.HJual,
+		})
+	}
+
+	return nil
 }
 
 // DELETE: Hapus produk berdasarkan ID
@@ -81,7 +96,7 @@ func (s *ProductService) Delete(id string) error {
 // GET BY ID: Ambil satu produk untuk diedit
 func (s *ProductService) GetByID(id string) (domain.Product, error) {
 	var product domain.Product
-	err := s.DB.Preload("Category").Preload("Brand").Preload("Supplier").First(&product, id).Error
+	err := s.DB.Preload("Category").Preload("Brand").Preload("Supplier").Preload("Stocks").First(&product, id).Error
 	return product, err
 }
 

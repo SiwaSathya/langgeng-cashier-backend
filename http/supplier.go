@@ -60,9 +60,9 @@ func (h *SupplierHandler) Create(
 	c *fiber.Ctx,
 ) error {
 
-	supplier := new(domain.Supplier)
+	var req domain.SupplierRequest
 
-	if err := c.BodyParser(supplier); err != nil {
+	if err := c.BodyParser(&req); err != nil {
 
 		return c.Status(400).JSON(
 			fiber.Map{
@@ -71,6 +71,11 @@ func (h *SupplierHandler) Create(
 			},
 		)
 
+	}
+
+	supplier := &domain.Supplier{
+		ID:   req.ID,
+		Name: req.Name,
 	}
 
 	if err := h.Service.CreateSupplier(
@@ -173,9 +178,9 @@ func (h *SupplierHandler) Update(
 
 	id := c.Params("id")
 
-	supplier := new(domain.Supplier)
+	var req domain.SupplierRequest
 
-	if err := c.BodyParser(supplier); err != nil {
+	if err := c.BodyParser(&req); err != nil {
 
 		return c.Status(400).JSON(
 			fiber.Map{
@@ -185,7 +190,10 @@ func (h *SupplierHandler) Update(
 
 	}
 
-	supplier.ID = id
+	supplier := &domain.Supplier{
+		ID:   id,
+		Name: req.Name,
+	}
 
 	if err :=
 		h.Service.UpdateSupplier(supplier); err != nil {

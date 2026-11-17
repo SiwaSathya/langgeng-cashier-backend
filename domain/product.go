@@ -21,66 +21,54 @@ type Product struct {
 	Category   Category
 	BrandID    uint
 	Brand      Brand
+	Stocks     []ProductStock `gorm:"foreignKey:ProductID" json:"stocks,omitempty"`
 }
 
 type ProductResponse struct {
-	ID         uint       `json:"id"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
-	DeletedAt  *time.Time `json:"deleted_at"`
-	Kode       string     `json:"kode"`
-	Nama       string     `json:"nama"`
-	Satuan     string     `json:"satuan"`
-	Saldo      float64    `json:"saldo"`
-	HBeli      float64
-	HPokok     float64
-	HJual      float64
-	SupplierID string
-	Supplier   Supplier
-	CategoryID uint
-	Category   Category
-	BrandID    uint
-	Brand      Brand
+	ID         uint           `json:"id"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	DeletedAt  *time.Time     `json:"deleted_at"`
+	Kode       string         `json:"kode"`
+	Nama       string         `json:"nama"`
+	Satuan     string         `json:"satuan"`
+	Saldo      float64        `json:"saldo"`
+	HBeli      float64        `json:"h_beli,omitempty"`
+	HPokok     float64        `json:"h_pokok,omitempty"`
+	HJual      float64        `json:"h_jual,omitempty"`
+	SupplierID string         `json:"supplier_id,omitempty"`
+	Supplier   Supplier       `json:"supplier,omitempty"`
+	CategoryID uint           `json:"category_id,omitempty"`
+	Category   Category       `json:"category,omitempty"`
+	BrandID    uint           `json:"brand_id,omitempty"`
+	Brand      Brand          `json:"brand,omitempty"`
+	Stocks     []ProductStock `json:"stocks,omitempty"`
 }
 
 type ProductRequest struct {
-	ID         uint       `json:"id"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
-	DeletedAt  *time.Time `json:"deleted_at"`
-	Kode       string     `json:"kode"`
-	Nama       string     `json:"nama"`
-	Satuan     string     `json:"satuan"`
-	Saldo      float64    `json:"saldo"`
-	HBeli      float64
-	HPokok     float64
-	HJual      float64
-	SupplierID string
-	Supplier   Supplier
-	CategoryID uint
-	Category   Category
-	BrandID    uint
-	Brand      Brand
+	Kode       string  `json:"kode"`
+	Nama       string  `json:"nama"`
+	Satuan     string  `json:"satuan"`
+	Saldo      float64 `json:"saldo"`
+	HBeli      float64 `json:"h_beli"`
+	HPokok     float64 `json:"h_pokok"`
+	HJual      float64 `json:"h_jual"`
+	SupplierID string  `json:"supplier_id"`
+	CategoryID uint    `json:"category_id"`
+	BrandID    uint    `json:"brand_id"`
 }
 
 type ProductRequestUpdate struct {
-	ID        uint       `json:"id"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	DeletedAt *time.Time `json:"deleted_at"`
-	Kode      string     `json:"kode"`
-	Nama      string     `json:"nama"`
-	// Satuan     string     `json:"satuan"`
+	Kode       string  `json:"kode"`
+	Nama       string  `json:"nama"`
+	Satuan     string  `json:"satuan"`
 	Saldo      float64 `json:"saldo"`
-	HBeli      float64
-	HPokok     float64
-	HJual      float64
-	SupplierID string
-	Supplier   Supplier
-	CategoryID uint
-	Category   Category
-	BrandID    uint
-	Brand      Brand
+	HBeli      float64 `json:"h_beli"`
+	HPokok     float64 `json:"h_pokok"`
+	HJual      float64 `json:"h_jual"`
+	SupplierID string  `json:"supplier_id"`
+	CategoryID uint    `json:"category_id"`
+	BrandID    uint    `json:"brand_id"`
 }
 
 // DTO untuk Laporan Nilai & Valuasi Stok per Tanggal Tertentu (Historical Cutoff)

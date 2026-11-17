@@ -22,6 +22,7 @@ func NewProductHandler(s *service.ProductService) *ProductHandler {
 
 func (h *ProductHandler) RegisterRoutes(app fiber.Router) {
 	group := app.Group("api/products")
+	group.Get("/live", h.LiveStock)
 	group.Get("/historical-stock", h.GetHistoricalStock)
 	group.Get("/export-stock", h.ExportHistoricalStock)
 	group.Get("/", h.FetchProducts)
@@ -52,7 +53,7 @@ func isRestrictedStockRole(c *fiber.Ctx) bool {
 		tokenStr = strings.TrimSpace(tokenStr)
 		if tokenStr != "" {
 			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-				return []byte("smartpos_secret_key"), nil
+				return service.GetJWTSecret(), nil
 			})
 			if err == nil && token != nil {
 				if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
@@ -165,12 +166,25 @@ func (h *ProductHandler) GetByID(c *fiber.Ctx) error {
 // @Failure      400      {object}  map[string]string
 // @Router       /products [post]
 func (h *ProductHandler) Create(c *fiber.Ctx) error {
-	var input domain.Product
-	if err := c.BodyParser(&input); err != nil {
+	var req domain.ProductRequest
+	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
 
-	if err := h.Service.Create(input); err != nil {
+	prod := domain.Product{
+		Kode:       req.Kode,
+		Nama:       req.Nama,
+		Satuan:     req.Satuan,
+		Saldo:      req.Saldo,
+		HBeli:      req.HBeli,
+		HPokok:     req.HPokok,
+		HJual:      req.HJual,
+		SupplierID: req.SupplierID,
+		CategoryID: req.CategoryID,
+		BrandID:    req.BrandID,
+	}
+
+	if err := h.Service.Create(prod); err != nil {
 		return c.Status(400).JSON(fiber.Map{"message": err.Error()})
 	}
 
@@ -216,4 +230,9 @@ func (h *ProductHandler) Delete(c *fiber.Ctx) error {
 	}
 
 	return c.Status(200).JSON(fiber.Map{"message": "product deleted successfully"})
+}
+
+// LiveStock menyiarkan event perubahan stok produk secara real-time via SSE
+func (h *ProductHandler) LiveStock(c *fiber.Ctx) error {
+	return StreamSSE(c, service.GetGlobalSSE(), "products:stock")
 }

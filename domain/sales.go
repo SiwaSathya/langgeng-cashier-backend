@@ -165,9 +165,20 @@ type UpdateShiftRequest struct {
 	Location string `json:"location"`
 }
 
+type PelunasanReceiptItem struct {
+	ID           uint      `json:"id"`
+	SalesID      uint      `json:"sales_id"`
+	Invoice      string    `json:"invoice"`
+	CustomerName string    `json:"customer_name"`
+	Type         string    `json:"type"`
+	Amount       float64   `json:"amount"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
 type ReceiptResponse struct {
-	Category string    `json:"category"`
-	Location string    `json:"location,omitempty"`
-	Sales    []Sales   `json:"sales"`
-	Expenses []Expense `json:"expenses"`
+	Category   string                 `json:"category"`
+	Location   string                 `json:"location,omitempty"`
+	Sales      []Sales                `json:"sales"`
+	Expenses   []Expense              `json:"expenses"`
+	Pelunasans []PelunasanReceiptItem `json:"pelunasans"`
 }

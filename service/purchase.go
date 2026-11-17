@@ -118,6 +118,7 @@ func (s *PurchaseService) CreateBatch(req domain.CreatePurchaseBatchRequest) err
 			if err := tx.Model(&prod).Update("saldo", prod.Saldo+item.Qty).Error; err != nil {
 				return err
 			}
+			_ = AdjustProductStock(tx, prod.ID, loc, item.Qty, "PURCHASE", req.Nota, fmt.Sprintf("Pembelian Masuk (#%s)", req.Nota), "SYSTEM")
 
 			// Perbarui harga beli master jika diisi
 			if item.HBeli > 0 {
@@ -324,6 +325,7 @@ func (s *PurchaseService) DeleteByNota(nota string) error {
 			var prod domain.Product
 			if err := tx.First(&prod, item.ProductID).Error; err == nil {
 				tx.Model(&prod).Update("saldo", prod.Saldo-item.Qty)
+				_ = AdjustProductStock(tx, prod.ID, item.Location, -item.Qty, "PURCHASE_CANCEL", item.Nota, fmt.Sprintf("Pembatalan Pembelian (#%s)", item.Nota), "SYSTEM")
 			}
 		}
 

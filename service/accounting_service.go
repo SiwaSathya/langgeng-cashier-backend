@@ -717,9 +717,21 @@ func (s *AccountingService) AutoPostSalesJournal(tx *gorm.DB, invoice string, pa
 	}
 
 	var debetAcc, salesAcc, ppnAcc domain.Account
-	tx.Where("LOWER(name) = ?", strings.ToLower(debetAccountName)).First(&debetAcc)
-	tx.Where("LOWER(name) = ?", "penjualan").First(&salesAcc)
-	tx.Where("LOWER(name) = ?", "ppn keluaran").First(&ppnAcc)
+	if err := tx.Where("LOWER(name) = ?", strings.ToLower(debetAccountName)).First(&debetAcc).Error; err != nil || debetAcc.ID == 0 {
+		if err := tx.Unscoped().Where("LOWER(name) = ?", strings.ToLower(debetAccountName)).First(&debetAcc).Error; err == nil && debetAcc.DeletedAt.Valid {
+			_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", debetAcc.ID).Update("deleted_at", nil).Error
+		}
+	}
+	if err := tx.Where("LOWER(name) = ? OR code = ?", "penjualan", "4101").First(&salesAcc).Error; err != nil || salesAcc.ID == 0 {
+		if err := tx.Unscoped().Where("code = ? OR LOWER(name) = ?", "4101", "penjualan").First(&salesAcc).Error; err == nil && salesAcc.DeletedAt.Valid {
+			_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", salesAcc.ID).Update("deleted_at", nil).Error
+		}
+	}
+	if err := tx.Where("LOWER(name) = ? OR code = ?", "ppn keluaran", "2102").First(&ppnAcc).Error; err != nil || ppnAcc.ID == 0 {
+		if err := tx.Unscoped().Where("code = ? OR LOWER(name) = ?", "2102", "ppn keluaran").First(&ppnAcc).Error; err == nil && ppnAcc.DeletedAt.Valid {
+			_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", ppnAcc.ID).Update("deleted_at", nil).Error
+		}
+	}
 
 	if debetAcc.ID == 0 || salesAcc.ID == 0 {
 		return
@@ -795,7 +807,11 @@ func (s *AccountingService) AutoPostExpenseJournal(tx *gorm.DB, nota, deskripsi,
 	var kasAcc domain.Account
 	// Prioritas: kode 1101 atau nama "KAS"
 	if err := tx.Where("code = ? OR LOWER(name) = ?", "1101", "kas").First(&kasAcc).Error; err != nil || kasAcc.ID == 0 {
-		if err := tx.Where("type = ?", "ASSET").First(&kasAcc).Error; err != nil || kasAcc.ID == 0 {
+		if err := tx.Unscoped().Where("code = ? OR LOWER(name) = ?", "1101", "kas").First(&kasAcc).Error; err == nil && kasAcc.ID > 0 {
+			if kasAcc.DeletedAt.Valid {
+				_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", kasAcc.ID).Update("deleted_at", nil).Error
+			}
+		} else if err := tx.Where("type = ?", "ASSET").First(&kasAcc).Error; err != nil || kasAcc.ID == 0 {
 			return errors.New("akun kas/aset tidak ditemukan di sistem")
 		}
 	}
@@ -831,16 +847,18 @@ func (s *AccountingService) AutoPostExpenseJournal(tx *gorm.DB, nota, deskripsi,
 
 	var expAcc domain.Account
 	if err := tx.Where("LOWER(name) = ?", strings.ToLower(expenseAccountName)).First(&expAcc).Error; err != nil || expAcc.ID == 0 {
-		if err := tx.Where("code = ? OR LOWER(name) = ?", "6199", "biaya lain lain").First(&expAcc).Error; err != nil || expAcc.ID == 0 {
+		if err := tx.Unscoped().Where("code = ? OR LOWER(name) = ?", "6199", "biaya lain lain").First(&expAcc).Error; err == nil && expAcc.ID > 0 {
+			if expAcc.DeletedAt.Valid {
+				_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", expAcc.ID).Update("deleted_at", nil).Error
+			}
+		} else {
 			expAcc = domain.Account{
 				Code:           "6199",
 				Name:           "BIAYA LAIN LAIN",
 				Type:           "EXPENSE",
 				NormalPosition: "DEBET",
 			}
-			if err := tx.Create(&expAcc).Error; err != nil {
-				tx.Where("code = ?", "6199").First(&expAcc)
-			}
+			_ = tx.Create(&expAcc).Error
 		}
 	}
 
@@ -890,8 +908,16 @@ func (s *AccountingService) AutoPostPurchaseJournal(tx *gorm.DB, nota string, to
 	}
 
 	var buyAcc, kasAcc domain.Account
-	tx.Where("LOWER(name) = ?", "pembelian").First(&buyAcc)
-	tx.Where("LOWER(name) = ?", "kas").First(&kasAcc)
+	if err := tx.Where("LOWER(name) = ? OR code = ?", "pembelian", "5102").First(&buyAcc).Error; err != nil || buyAcc.ID == 0 {
+		if err := tx.Unscoped().Where("code = ? OR LOWER(name) = ?", "5102", "pembelian").First(&buyAcc).Error; err == nil && buyAcc.DeletedAt.Valid {
+			_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", buyAcc.ID).Update("deleted_at", nil).Error
+		}
+	}
+	if err := tx.Where("LOWER(name) = ? OR code = ?", "kas", "1101").First(&kasAcc).Error; err != nil || kasAcc.ID == 0 {
+		if err := tx.Unscoped().Where("code = ? OR LOWER(name) = ?", "1101", "kas").First(&kasAcc).Error; err == nil && kasAcc.DeletedAt.Valid {
+			_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", kasAcc.ID).Update("deleted_at", nil).Error
+		}
+	}
 
 	if buyAcc.ID == 0 || kasAcc.ID == 0 {
 		return
@@ -1213,10 +1239,39 @@ func (s *AccountingService) EnsureStandardAccounts(tx *gorm.DB) (int, error) {
 	createdCount := 0
 	for _, acc := range standardAccounts {
 		var existing domain.Account
-		err := tx.Where("code = ? OR LOWER(name) = ?", acc.Code, strings.ToLower(acc.Name)).First(&existing).Error
-		if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-			if errCreate := tx.Create(&acc).Error; errCreate == nil {
+		// Gunakan Unscoped() agar akun yang sebelumnya soft-deleted tetap terdeteksi
+		// dan tidak menyebabkan pelanggaran unique constraint pada index idx_accounts_code di PostgreSQL
+		err := tx.Unscoped().Where("code = ?", acc.Code).First(&existing).Error
+		if err == nil && existing.ID > 0 {
+			if existing.DeletedAt.Valid {
+				_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
+					"deleted_at":      nil,
+					"code":            acc.Code,
+					"name":            acc.Name,
+					"type":            acc.Type,
+					"normal_position": acc.NormalPosition,
+					"description":     acc.Description,
+				}).Error
 				createdCount++
+			}
+		} else {
+			var existingByName domain.Account
+			errByName := tx.Unscoped().Where("LOWER(name) = ?", strings.ToLower(acc.Name)).First(&existingByName).Error
+			if errByName == nil && existingByName.ID > 0 {
+				updates := map[string]interface{}{
+					"code":            acc.Code,
+					"type":            acc.Type,
+					"normal_position": acc.NormalPosition,
+					"description":     acc.Description,
+				}
+				if existingByName.DeletedAt.Valid {
+					updates["deleted_at"] = nil
+				}
+				_ = tx.Unscoped().Model(&domain.Account{}).Where("id = ?", existingByName.ID).Updates(updates).Error
+			} else {
+				if errCreate := tx.Create(&acc).Error; errCreate == nil {
+					createdCount++
+				}
 			}
 		}
 	}

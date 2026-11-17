@@ -1,1 +1,16 @@
+# Environment Variables
 .env
+.env.local
+.env.*.local
+
+# Binaries
+server
+backend-cashier
+*.exe
+
+# Logs
+*.log
+
+# Uploads & temporary files
+uploads/
+.DS_Store

@@ -25,3 +25,13 @@ type ExpenseFilter struct {
 	Type      string `query:"type"` // "purchase" atau "operational"
 	Location  string `query:"location"`
 }
+type ExpenseRequest struct {
+	Nota      string    `json:"nota"`
+	Tanggal   time.Time `json:"tanggal"`
+	Deskripsi string    `json:"deskripsi"`
+	Total     float64   `json:"total"`
+	Kategori  string    `json:"kategori"`
+	UserID    string    `json:"user_id"`
+	Location  string    `json:"location"`
+	Shift     *uint     `json:"shift"`
+}

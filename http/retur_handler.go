@@ -37,7 +37,7 @@ func extractReturUser(c *fiber.Ctx) (*string, string, string) {
 		tokenStr = strings.TrimSpace(tokenStr)
 		if tokenStr != "" {
 			token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-				return []byte("smartpos_secret_key"), nil
+				return service.GetJWTSecret(), nil
 			})
 			if err == nil && token != nil {
 				if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {

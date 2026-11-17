@@ -10,6 +10,7 @@ type PaymentMethod struct {
 	Type    string `json:"type"`
 	Amount  string `json:"amount"`
 	Status  string `json:"status"`
+	Shift   *uint  `json:"shift" gorm:"default:null"`
 	Sales   Sales  `gorm:"foreignKey:SalesID"`
 }
 

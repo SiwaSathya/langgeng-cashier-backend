@@ -18,6 +18,7 @@ type TransactionService struct {
 }
 
 func NewTransactionService(db *gorm.DB, accountingSvc *AccountingService) *TransactionService {
+	_ = db.Exec("ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS shift bigint DEFAULT NULL;")
 	return &TransactionService{
 		DB:            db,
 		AccountingSvc: accountingSvc,
@@ -104,6 +105,7 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 		status := "Lunas"
 		if req.IsBon {
 			status = "Bon"
+			req.AmountPaid = 0
 		} else if req.IsDp {
 			status = "DP"
 		}
@@ -158,15 +160,24 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 			if err := tx.Model(&prod).Update("saldo", prod.Saldo-item.Qty).Error; err != nil {
 				return err
 			}
+			_ = AdjustProductStock(tx, prod.ID, location, -item.Qty, "SALE", invoice, fmt.Sprintf("Penjualan Kasir (#%s)", invoice), req.UserID)
 
 			salesRecords = append(salesRecords, sales)
+		}
+
+		change := 0.0
+		if !req.IsBon && !req.IsDp && req.AmountPaid > totalNettoAll {
+			change = req.AmountPaid - totalNettoAll
+		}
+		if change > 0 {
+			_ = tx.Model(&domain.Sales{}).Where("invoice = ?", invoice).Update("change", change).Error
 		}
 
 		// 3. Simpan Payment Method
 		if len(salesRecords) > 0 {
 			primarySalesID := salesRecords[0].ID
 
-			if req.IsBon && len(req.PaymentMethods) == 0 {
+			if req.IsBon {
 				// Catat transaksi bon nominal 0
 				record := domain.PaymentMethod{
 					SalesID: primarySalesID,
@@ -196,10 +207,14 @@ func (s *TransactionService) CreateSales(req domain.CreateTransactionRequest) (*
 					createdPaymentMethods = append(createdPaymentMethods, record)
 				}
 			} else {
+				actualPaid := req.AmountPaid
+				if !req.IsDp && req.AmountPaid > totalNettoAll && totalNettoAll > 0 {
+					actualPaid = totalNettoAll
+				}
 				record := domain.PaymentMethod{
 					SalesID: primarySalesID,
 					Type:    req.PaymentMethod,
-					Amount:  fmt.Sprintf("%.0f", req.AmountPaid),
+					Amount:  fmt.Sprintf("%.0f", actualPaid),
 					Status:  status,
 				}
 				if err := tx.Create(&record).Error; err != nil {
@@ -608,6 +623,20 @@ func (a *TransactionService) GetUserSales(userId uint) ([]domain.SalesTransactio
 	return GroupSalesByInvoice(sales), nil
 }
 
+func (s *TransactionService) GetSaleByIdentifier(identifier string) (*domain.Sales, error) {
+	var sale domain.Sales
+	if id, err := strconv.Atoi(identifier); err == nil && id > 0 {
+		if err := s.DB.First(&sale, id).Error; err != nil {
+			return nil, err
+		}
+		return &sale, nil
+	}
+	if err := s.DB.Where("invoice = ?", identifier).First(&sale).Error; err != nil {
+		return nil, err
+	}
+	return &sale, nil
+}
+
 func (s *TransactionService) PelunasanSales(identifier string, req domain.PelunasanRequest) (*domain.PelunasanResponse, error) {
 	var salesList []domain.Sales
 
@@ -781,6 +810,9 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 		loc = "Toko Utama"
 	}
 
+	// Pastikan kolom shift di tabel payment_methods ada secara aman
+	_ = s.DB.Exec("ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS shift bigint DEFAULT NULL;")
+
 	var sales []domain.Sales
 	var expenses []domain.Expense
 
@@ -808,11 +840,43 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 		return nil, err
 	}
 
+	// Ambil data penerimaan Pelunasan yang belum terikat shift
+	var pelunasanMethods []domain.PaymentMethod
+	pelQuery := s.DB.Preload("Sales.Customer").
+		Where("status = ?", "Pelunasan").
+		Where("shift IS NULL")
+
+	if !strings.EqualFold(loc, "Semua Toko") {
+		pelQuery = pelQuery.Joins("JOIN sales ON sales.id = payment_methods.sales_id").
+			Where("(sales.location = ? OR (sales.location = '' AND ? = 'Toko Utama'))", loc, loc)
+	}
+
+	_ = pelQuery.Find(&pelunasanMethods).Error
+
+	pelunasanItems := make([]domain.PelunasanReceiptItem, 0)
+	for _, pm := range pelunasanMethods {
+		amt, _ := strconv.ParseFloat(pm.Amount, 64)
+		custName := "-"
+		if pm.Sales.Customer.Name != "" {
+		custName = pm.Sales.Customer.Name
+		}
+		pelunasanItems = append(pelunasanItems, domain.PelunasanReceiptItem{
+			ID:           pm.ID,
+			SalesID:      pm.SalesID,
+			Invoice:      pm.Sales.Invoice,
+			CustomerName: custName,
+			Type:         pm.Type,
+			Amount:       amt,
+			CreatedAt:    pm.CreatedAt,
+		})
+	}
+
 	return &domain.ReceiptResponse{
-		Category: "SHIFT_RECEIPT",
-		Location: loc,
-		Sales:    sales,
-		Expenses: expenses,
+		Category:   "SHIFT_RECEIPT",
+		Location:   loc,
+		Sales:      sales,
+		Expenses:   expenses,
+		Pelunasans: pelunasanItems,
 	}, nil
 }
 
@@ -821,6 +885,8 @@ func (s *TransactionService) UpdateSalesShift(shift uint, location string) error
 	if loc == "" || strings.EqualFold(loc, "Pusat") {
 		loc = "Toko Utama"
 	}
+
+	_ = s.DB.Exec("ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS shift bigint DEFAULT NULL;")
 
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		// 1. Update shift pada data Sales yang belum memiliki shift
@@ -841,6 +907,17 @@ func (s *TransactionService) UpdateSalesShift(shift uint, location string) error
 
 		if err := expenseQuery.Update("shift", shift).Error; err != nil {
 			return fmt.Errorf("gagal memperbarui shift expense: %w", err)
+		}
+
+		// 3. Update shift pada data PaymentMethod Pelunasan yang belum memiliki shift
+		if strings.EqualFold(loc, "Semua Toko") {
+			if err := tx.Exec("UPDATE payment_methods SET shift = ? WHERE status = 'Pelunasan' AND shift IS NULL", shift).Error; err != nil {
+				return fmt.Errorf("gagal memperbarui shift pelunasan: %w", err)
+			}
+		} else {
+			if err := tx.Exec("UPDATE payment_methods SET shift = ? WHERE status = 'Pelunasan' AND shift IS NULL AND sales_id IN (SELECT id FROM sales WHERE location = ? OR (location = '' AND ? = 'Toko Utama'))", shift, loc, loc).Error; err != nil {
+				return fmt.Errorf("gagal memperbarui shift pelunasan: %w", err)
+			}
 		}
 
 		return nil
@@ -878,6 +955,7 @@ func (s *TransactionService) DeleteSales(identifier string) error {
 				var prod domain.Product
 				if err := tx.First(&prod, item.ProductID).Error; err == nil {
 					tx.Model(&prod).Update("saldo", prod.Saldo+item.Qty)
+					_ = AdjustProductStock(tx, prod.ID, item.Location, item.Qty, "SALE_ROLLBACK", invoice, fmt.Sprintf("Pembatalan Penjualan (#%s)", invoice), "SYSTEM")
 				}
 			}
 		}

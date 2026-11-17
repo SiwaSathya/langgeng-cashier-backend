@@ -7,10 +7,14 @@ import (
 	"backend-cashier/service"
 	"log"
 	"os"
+	"strings"
+	"time"
 
 	swagger "github.com/arsmn/fiber-swagger/v2"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
 )
@@ -33,27 +37,105 @@ func main() {
 	attendanceService := service.NewAttendanceService(db.Postgres.DB)
 	analyticsService := service.NewAnalyticsService(db.Postgres.DB)
 	supplierService := service.NewSupplierService(db.Postgres.DB)
+	storageService := service.NewStorageService()
+	sseService := service.NewSSEService()
+	service.SetGlobalSSE(sseService)
+	opnameService := service.NewOpnameService(db.Postgres.DB, storageService, sseService)
+	presenceService := service.NewPresenceService(sseService)
+	userLogService := service.NewUserLogService(db.Postgres.DB)
 
-	trxHandler := http.NewTransactionHandler(trxService)
+	trxHandler := http.NewTransactionHandler(trxService, authService)
 	masterHandler := http.NewMasterHandler(masterService)
 	prodHandler := http.NewProductHandler(prodService)
 	purchaseHandler := http.NewPurchaseHandler(purchaseService)
-	authHandler := http.NewAuthHandler(authService)
+	authHandler := http.NewAuthHandler(authService, userLogService, presenceService)
 	expenseHandler := http.NewExpenseHandler(expenseService)
 	returHandler := http.NewReturHandler(returService)
 	attendanceHandler := http.NewAttendanceHandler(attendanceService)
 	accountingHandler := http.NewAccountingHandler(accountingService)
 	analyticsHandler := http.NewAnalyticsHandler(analyticsService)
 	supplierHandler := http.NewSupplierHandler(supplierService)
+	opnameHandler := http.NewOpnameHandler(opnameService, storageService)
+	presenceHandler := http.NewPresenceHandler(presenceService, sseService)
 
 	app := fiber.New(fiber.Config{
-		AppName: "Backend Cashier API",
+		AppName:   "Backend Cashier API",
+		BodyLimit: 2 * 1024 * 1024, // Maksimal 2 MB BodyLimit untuk mencegah Memory Exhaustion (Payload Bombs / OOM Crash di Railway)
 	})
 
+	// 1. Kompresi HTTP Response (Gzip/Brotli) untuk Menghemat Bandwidth Keluar (Egress) hingga 70-85%
+	app.Use(compress.New(compress.Config{
+		Level: compress.LevelBestSpeed,
+	}))
+
+	// 2. Logger Request HTTP
 	app.Use(logger.New())
 
+	// 2. Enhanced Security Headers (X-Content-Type-Options, X-Frame-Options, dsb)
+	app.Use(http.SecurityHeadersMiddleware())
+
+	// 3. CORS Configuration dengan Dynamic Origin Verification (Akses File Lokal, Vercel, & Localhost)
+	app.Use(cors.New(cors.Config{
+		AllowOriginsFunc: func(origin string) bool {
+			// 1. Izinkan akses langsung via file browser (file:// mengirim Origin: null atau kosong)
+			if origin == "" || origin == "null" {
+				return true
+			}
+			// 2. Izinkan domain vercel resmi & preview deployment vercel
+			if origin == "https://langgeng-cashier.vercel.app" || strings.HasSuffix(origin, ".vercel.app") {
+				return true
+			}
+			// 3. Izinkan localhost & IP lokal untuk testing & produksi lokal
+			if strings.HasPrefix(origin, "http://localhost:") ||
+				strings.HasPrefix(origin, "http://127.0.0.1:") ||
+				strings.HasPrefix(origin, "https://localhost:") ||
+				strings.HasPrefix(origin, "https://127.0.0.1:") {
+				return true
+			}
+			// 4. Periksa apakah ada konfigurasi tambahan via environment variable
+			if envOrigins := os.Getenv("ALLOWED_ORIGINS"); envOrigins != "" {
+				for _, o := range strings.Split(envOrigins, ",") {
+					if strings.TrimSpace(o) == origin {
+						return true
+					}
+				}
+			}
+			return false
+		},
+		AllowCredentials: true,
+		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With",
+		ExposeHeaders:    "X-Renewed-Token, Content-Disposition",
+	}))
+
+	// 4. XSS Sanitizer Middleware (Mencegah Penyusupan Skrip Berbahaya / Input XSS)
+	app.Use(http.XSSSanitizerMiddleware())
+
+	// 5. SQL Injection Protection Firewall (Penyaring Otomatis Payload Injeksi Berbahaya)
+	app.Use(http.SQLInjectionFirewallMiddleware())
+
+	// 5. Rate Limiter Perlindungan API dari Serangan DoS / Brute-Force Massal
+	app.Use("/api", limiter.New(limiter.Config{
+		Max:        300, // 300 request per menit per IP
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Batas frekuensi permintaan terlampaui (Rate Limit). Silakan tunggu beberapa saat.",
+				"code":  "RATE_LIMIT_EXCEEDED",
+			})
+		},
+	}))
+
+	// 6. Rolling Session Middleware (Otomatis Perpanjang Token 9 Jam saat User Berinteraksi setelah 5 Jam)
+	app.Use(http.RollingSessionMiddleware(authService))
+
 	app.Get("/swagger/*", swagger.HandlerDefault)
-	app.Use(cors.New())
+
+	// Static route untuk file upload lokal (fallback jika MinIO belum diset)
+	app.Static("/uploads", "./uploads")
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		sqlDB, err := db.Postgres.DB.DB()
@@ -89,6 +171,11 @@ func main() {
 	accountingHandler.RegisterRoutes(app)
 	analyticsHandler.RegisterRoutes(app)
 	supplierHandler.RegisterRoutes(app)
+	opnameHandler.RegisterRoutes(app)
+	presenceHandler.RegisterRoutes(app)
+
+	// Layani frontend static files langsung dari port backend
+	app.Static("/", "../langgeng-frontend-main")
 
 	port := os.Getenv("PORT")
 	if port == "" {

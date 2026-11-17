@@ -5,49 +5,56 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/pandeptwidyaop/golog"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-type PostgresStruct struct {
+type PostgresDatabase struct {
 	DB *gorm.DB
 }
 
-var Postgres PostgresStruct
+var Postgres PostgresDatabase
 
 func New() {
-	_ = godotenv.Load()
+	var e error
+	dsn := fmt.Sprintf(
+		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Makassar",
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_DATABASE"),
+		os.Getenv("DB_PORT"),
+	)
 
-	host := os.Getenv("DB_HOST")
-	user := os.Getenv("DB_USER")
-	pass := os.Getenv("DB_PASSWORD")
-	name := os.Getenv("DB_DATABASE")
-	port := os.Getenv("DB_PORT")
+	db, e := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
-	if host == "" || user == "" || pass == "" || name == "" || port == "" {
-		log.Fatal("database env vars not set (DB_HOST/DB_USER/DB_PASSWORD/DB_DATABASE/DB_PORT). Ensure .env is loaded or env vars exported")
+	if e != nil {
+		golog.Slack.Error("Failed to connect to database", e)
+		log.Println(dsn)
+		log.Fatal(e)
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s TimeZone=Asia/Jakarta sslmode=disable", host, user, pass, name, port)
-
-	if Postgres.DB == nil {
-		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		Postgres = PostgresStruct{
-			DB: db,
-		}
-		env := os.Getenv("ENV")
-		if env != "test" {
-			RegisterTableToMigrate(db)
-		}
+	// Konfigurasi Connection Pool untuk Efisiensi Memori DB & Penghematan Biaya
+	sqlDB, errSql := db.DB()
+	if errSql == nil {
+		sqlDB.SetMaxOpenConns(25)                  // Batas maksimum 25 koneksi terbuka (mencegah DB RAM meledak)
+		sqlDB.SetMaxIdleConns(5)                   // 5 koneksi standby siap pakai
+		sqlDB.SetConnMaxLifetime(15 * time.Minute) // Daur ulang koneksi berkala setiap 15 menit
+		sqlDB.SetConnMaxIdleTime(5 * time.Minute)  // Tutup koneksi idle jika tidak dipakai selama 5 menit
 	}
 
+	Postgres = PostgresDatabase{
+		DB: db,
+	}
+
+	_ = db.Exec("ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS shift bigint DEFAULT NULL;")
+
+	if os.Getenv("ENV") == "development" {
+		RegisterTableToMigrate(db)
+	}
 }
 
 func RegisterTableToMigrate(db *gorm.DB) {
@@ -71,6 +78,12 @@ func RegisterTableToMigrate(db *gorm.DB) {
 		&domain.JournalItem{},
 		&domain.PiutangDagang{},
 		&domain.PaymentMethod{},
+		&domain.ProductStock{},
+		&domain.StockMovement{},
+		&domain.StockOpname{},
+		&domain.StockOpnameItem{},
+		&domain.UserActivityLog{},
+		&domain.RevokedToken{},
 	)
 
 	if e != nil {

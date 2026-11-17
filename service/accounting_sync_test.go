@@ -182,3 +182,55 @@ func TestSyncAllAccountingWipeAndRecreate(t *testing.T) {
 		t.Fatalf("expected sales journal entry recreated after wipe, err: %v", err)
 	}
 }
+
+func TestEnsureStandardAccountsWithSoftDeleted(t *testing.T) {
+	setupFeatureTestDB(t)
+	database := db.Postgres.DB
+	accountingSvc := service.NewAccountingService(database)
+
+	// Pastikan akun standar awal terbuat
+	if _, err := accountingSvc.EnsureStandardAccounts(database); err != nil {
+		t.Fatalf("failed initial EnsureStandardAccounts: %v", err)
+	}
+
+	// Soft-delete akun '1108' (PERSEDIAAN BARANG DAGANG) dan '6199' (BIAYA LAIN LAIN)
+	codesToTest := []string{"1108", "6199"}
+	for _, code := range codesToTest {
+		if err := database.Where("code = ?", code).Delete(&domain.Account{}).Error; err != nil {
+			t.Fatalf("failed to soft delete account %s: %v", code, err)
+		}
+
+		// Verifikasi bahwa secara default (scoped), akun dianggap record not found
+		var checkDeleted domain.Account
+		if err := database.Where("code = ?", code).First(&checkDeleted).Error; err == nil {
+			t.Fatalf("expected account %s to be soft-deleted and not found, but was found", code)
+		}
+
+		// Namun dengan Unscoped(), akun tetap ada dengan deleted_at != nil
+		var checkUnscoped domain.Account
+		if err := database.Unscoped().Where("code = ?", code).First(&checkUnscoped).Error; err != nil {
+			t.Fatalf("expected account %s to exist in Unscoped(), err: %v", code, err)
+		}
+		if !checkUnscoped.DeletedAt.Valid {
+			t.Fatalf("expected account %s to have DeletedAt.Valid == true", code)
+		}
+	}
+
+	// Panggil kembali EnsureStandardAccounts - harus berhasil tanpa error pelanggaran unique constraint idx_accounts_code
+	restoredCount, err := accountingSvc.EnsureStandardAccounts(database)
+	if err != nil {
+		t.Fatalf("EnsureStandardAccounts failed on soft-deleted accounts: %v", err)
+	}
+	t.Logf("EnsureStandardAccounts restored %d accounts successfully", restoredCount)
+
+	// Verifikasi bahwa kedua akun telah dipulihkan (deleted_at kembali nil / scoped query menemukannya)
+	for _, code := range codesToTest {
+		var restored domain.Account
+		if err := database.Where("code = ?", code).First(&restored).Error; err != nil {
+			t.Fatalf("expected account %s to be restored, but query returned err: %v", code, err)
+		}
+		if restored.DeletedAt.Valid {
+			t.Fatalf("expected restored account %s to have DeletedAt.Valid == false", code)
+		}
+	}
+}

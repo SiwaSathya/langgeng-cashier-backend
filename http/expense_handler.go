@@ -26,9 +26,20 @@ func (h *ExpenseHandler) RegisterRoutes(app *fiber.App) {
 }
 
 func (h *ExpenseHandler) Create(c *fiber.Ctx) error {
-	expense := new(domain.Expense)
-	if err := c.BodyParser(expense); err != nil {
-		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "Bad Request"})
+	var req domain.ExpenseRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "Format data tidak valid"})
+	}
+
+	expense := &domain.Expense{
+		Nota:      req.Nota,
+		Tanggal:   req.Tanggal,
+		Deskripsi: req.Deskripsi,
+		Total:     req.Total,
+		Kategori:  req.Kategori,
+		UserID:    req.UserID,
+		Location:  req.Location,
+		Shift:     req.Shift,
 	}
 
 	if err := h.Service.CreateExpense(expense); err != nil {
@@ -70,9 +81,20 @@ func (h *ExpenseHandler) GetByID(c *fiber.Ctx) error {
 
 func (h *ExpenseHandler) Update(c *fiber.Ctx) error {
 	id := c.Params("id")
-	input := new(domain.Expense)
-	if err := c.BodyParser(input); err != nil {
-		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "Bad Request"})
+	var req domain.ExpenseRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "Format data tidak valid"})
+	}
+
+	input := &domain.Expense{
+		Nota:      req.Nota,
+		Tanggal:   req.Tanggal,
+		Deskripsi: req.Deskripsi,
+		Total:     req.Total,
+		Kategori:  req.Kategori,
+		UserID:    req.UserID,
+		Location:  req.Location,
+		Shift:     req.Shift,
 	}
 
 	if err := h.Service.UpdateExpense(id, input); err != nil {

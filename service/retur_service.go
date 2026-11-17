@@ -53,6 +53,7 @@ func NewReturService(db *gorm.DB) ReturService {
 
 func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 	var returData domain.Retur
+	var salesInvoice string
 
 	// Menggunakan DB Transaction agar aman (ACID)
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -64,6 +65,7 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 			}
 			return err
 		}
+		salesInvoice = sale.Invoice
 
 		// 2. Validasi Qty Retur tidak boleh melebihi Qty Penjualan awal
 		if req.QtyRetur > int(sale.Qty) {
@@ -128,6 +130,11 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 			if err != nil {
 				return errors.New("gagal memperbarui stok produk")
 			}
+			userStr := ""
+			if resolvedUserID != nil {
+				userStr = *resolvedUserID
+			}
+			_ = AdjustProductStock(tx, sale.ProductID, sale.Location, float64(req.QtyRetur), "RETUR_CUSTOMER", fmt.Sprintf("Retur Pelanggan (#%s)", sale.Invoice), req.Reason, userStr)
 		}
 
 		return nil
@@ -135,6 +142,18 @@ func (s *returService) CreateRetur(req ReturRequest) (*domain.Retur, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	if globalSSE != nil {
+		globalSSE.Broadcast("sales:live", "retur_created", map[string]interface{}{
+			"sales_invoice": salesInvoice,
+			"product_id":    returData.ProductID,
+			"qty":           req.QtyRetur,
+			"reason":        returData.Reason,
+			"status":        returData.Status,
+			"user_name":     returData.UserName,
+			"created_at":    returData.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
 	}
 
 	return &returData, nil
@@ -205,6 +224,11 @@ func (s *returService) CreateDirectRetur(req DirectReturRequest) (*domain.Retur,
 		if err != nil {
 			return errors.New("gagal memotong stok produk")
 		}
+		userStr := ""
+		if resolvedUserID != nil {
+			userStr = *resolvedUserID
+		}
+		_ = AdjustProductStock(tx, req.ProductID, "Toko Utama", -float64(req.QtyRetur), "RETUR_DISTRIBUTOR", fmt.Sprintf("Retur ke Pabrik (#%d)", returData.ID), req.Reason, userStr)
 
 		return nil
 	})
