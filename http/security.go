@@ -147,6 +147,9 @@ var sqliPatterns = []*regexp.Regexp{
 // SQLInjectionFirewallMiddleware menyaring setiap request dari indikasi SQL injection
 func SQLInjectionFirewallMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		if c.Method() == fiber.MethodOptions {
+			return c.Next()
+		}
 		// 1. Periksa URL Raw Path & Query String
 		rawURL := c.OriginalURL()
 		decodedURL, _ := url.QueryUnescape(rawURL)
@@ -199,6 +202,9 @@ var xssPatterns = []*regexp.Regexp{
 
 func XSSSanitizerMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		if c.Method() == fiber.MethodOptions {
+			return c.Next()
+		}
 		// Periksa Query Strings
 		rawQuery := c.OriginalURL()
 		decodedQuery, _ := url.QueryUnescape(rawQuery)
@@ -244,6 +250,9 @@ func XSSSanitizerMiddleware() fiber.Handler {
 
 func SecurityHeadersMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		if c.Method() == fiber.MethodOptions {
+			return c.Next()
+		}
 		// 1. Anti-MIME Sniffing
 		c.Set("X-Content-Type-Options", "nosniff")
 

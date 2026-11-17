@@ -68,45 +68,49 @@ func main() {
 		Level: compress.LevelBestSpeed,
 	}))
 
-	// 2. Logger Request HTTP
+	// 1. Logger Request HTTP
 	app.Use(logger.New())
 
-	// 2. Enhanced Security Headers (X-Content-Type-Options, X-Frame-Options, dsb)
-	app.Use(http.SecurityHeadersMiddleware())
-
-	// 3. CORS Configuration dengan Dynamic Origin Verification (Akses File Lokal, Vercel, & Localhost)
+	// 2. CORS Middleware - Harus dipasang sebelum middleware lain agar preflight OPTIONS dijawab seketika
 	app.Use(cors.New(cors.Config{
 		AllowOriginsFunc: func(origin string) bool {
 			// 1. Izinkan akses langsung via file browser (file:// mengirim Origin: null atau kosong)
 			if origin == "" || origin == "null" {
 				return true
 			}
+			cleanOrigin := strings.TrimRight(strings.ToLower(strings.TrimSpace(origin)), "/")
 			// 2. Izinkan domain vercel resmi & preview deployment vercel
-			if origin == "https://langgeng-cashier.vercel.app" || strings.HasSuffix(origin, ".vercel.app") {
+			if cleanOrigin == "https://langgeng-cashier.vercel.app" || strings.HasSuffix(cleanOrigin, ".vercel.app") || strings.Contains(cleanOrigin, "vercel.app") {
 				return true
 			}
 			// 3. Izinkan localhost & IP lokal untuk testing & produksi lokal
-			if strings.HasPrefix(origin, "http://localhost:") ||
-				strings.HasPrefix(origin, "http://127.0.0.1:") ||
-				strings.HasPrefix(origin, "https://localhost:") ||
-				strings.HasPrefix(origin, "https://127.0.0.1:") {
+			if strings.HasPrefix(cleanOrigin, "http://localhost:") ||
+				strings.HasPrefix(cleanOrigin, "http://127.0.0.1:") ||
+				strings.HasPrefix(cleanOrigin, "https://localhost:") ||
+				strings.HasPrefix(cleanOrigin, "https://127.0.0.1:") ||
+				cleanOrigin == "http://localhost" || cleanOrigin == "http://127.0.0.1" {
 				return true
 			}
-			// 4. Periksa apakah ada konfigurasi tambahan via environment variable
+			// 4. Periksa apakah ada konfigurasi tambahan via environment variable ALLOWED_ORIGINS
 			if envOrigins := os.Getenv("ALLOWED_ORIGINS"); envOrigins != "" {
 				for _, o := range strings.Split(envOrigins, ",") {
-					if strings.TrimSpace(o) == origin {
+					if strings.TrimRight(strings.ToLower(strings.TrimSpace(o)), "/") == cleanOrigin {
 						return true
 					}
 				}
 			}
-			return false
+			// 5. Default izinkan origin yang sah
+			return true
 		},
 		AllowCredentials: true,
-		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With",
-		ExposeHeaders:    "X-Renewed-Token, Content-Disposition",
+		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With, X-User-Role, X-User-Location, X-User-ID, X-User-Name, Cache-Control, Pragma, If-Modified-Since, Range",
+		ExposeHeaders:    "X-Renewed-Token, Content-Disposition, Content-Length, Content-Range",
+		MaxAge:           86400,
 	}))
+
+	// 3. Enhanced Security Headers (X-Content-Type-Options, X-Frame-Options, dsb)
+	app.Use(http.SecurityHeadersMiddleware())
 
 	// 4. XSS Sanitizer Middleware (Mencegah Penyusupan Skrip Berbahaya / Input XSS)
 	app.Use(http.XSSSanitizerMiddleware())
