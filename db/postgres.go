@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pandeptwidyaop/golog"
@@ -52,8 +53,12 @@ func New() {
 
 	_ = db.Exec("ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS shift bigint DEFAULT NULL;")
 
-	if os.Getenv("ENV") == "development" {
+	envVal := strings.ToLower(strings.TrimSpace(os.Getenv("ENV")))
+	autoMigrateVal := strings.ToLower(strings.TrimSpace(os.Getenv("AUTO_MIGRATE")))
+	if envVal == "development" || envVal == "" || autoMigrateVal == "true" || autoMigrateVal == "1" {
+		log.Println("[Database] Memulai GORM AutoMigrate tabel...")
 		RegisterTableToMigrate(db)
+		log.Println("[Database] GORM AutoMigrate selesai dengan sukses!")
 	}
 }
 
