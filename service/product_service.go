@@ -48,6 +48,35 @@ func (s *ProductService) GetAll(search string, page int, limit int) ([]domain.Pr
 
 // CREATE: Tambah produk baru
 func (s *ProductService) Create(p domain.Product) error {
+	if strings.TrimSpace(p.Kode) == "" {
+		return errors.New("kode produk wajib diisi")
+	}
+	if strings.TrimSpace(p.Nama) == "" {
+		return errors.New("nama produk wajib diisi")
+	}
+	if p.CategoryID == 0 {
+		return errors.New("kategori produk wajib dipilih (category_id tidak boleh kosong)")
+	}
+
+	var catCount int64
+	if err := s.DB.Model(&domain.Category{}).Where("id = ?", p.CategoryID).Count(&catCount).Error; err != nil || catCount == 0 {
+		return fmt.Errorf("kategori dengan ID %d tidak ditemukan di database", p.CategoryID)
+	}
+
+	if p.BrandID > 0 {
+		var brandCount int64
+		if err := s.DB.Model(&domain.Brand{}).Where("id = ?", p.BrandID).Count(&brandCount).Error; err != nil || brandCount == 0 {
+			return fmt.Errorf("brand dengan ID %d tidak ditemukan di database", p.BrandID)
+		}
+	}
+
+	if p.SupplierID != "" {
+		var suppCount int64
+		if err := s.DB.Model(&domain.Supplier{}).Where("id = ?", p.SupplierID).Count(&suppCount).Error; err != nil || suppCount == 0 {
+			return fmt.Errorf("supplier dengan ID '%s' tidak ditemukan di database", p.SupplierID)
+		}
+	}
+
 	var count int64
 	s.DB.Model(&domain.Product{}).Where("kode = ?", p.Kode).Count(&count)
 	if count > 0 {
@@ -63,6 +92,27 @@ func (s *ProductService) Update(id string, p domain.ProductRequestUpdate) error 
 
 	if err := s.DB.First(&product, id).Error; err != nil {
 		return errors.New("produk tidak ditemukan")
+	}
+
+	if p.CategoryID > 0 {
+		var catCount int64
+		if err := s.DB.Model(&domain.Category{}).Where("id = ?", p.CategoryID).Count(&catCount).Error; err != nil || catCount == 0 {
+			return fmt.Errorf("kategori dengan ID %d tidak ditemukan di database", p.CategoryID)
+		}
+	}
+
+	if p.BrandID > 0 {
+		var brandCount int64
+		if err := s.DB.Model(&domain.Brand{}).Where("id = ?", p.BrandID).Count(&brandCount).Error; err != nil || brandCount == 0 {
+			return fmt.Errorf("brand dengan ID %d tidak ditemukan di database", p.BrandID)
+		}
+	}
+
+	if p.SupplierID != "" {
+		var suppCount int64
+		if err := s.DB.Model(&domain.Supplier{}).Where("id = ?", p.SupplierID).Count(&suppCount).Error; err != nil || suppCount == 0 {
+			return fmt.Errorf("supplier dengan ID '%s' tidak ditemukan di database", p.SupplierID)
+		}
 	}
 
 	if err := s.DB.Model(&product).Updates(p).Error; err != nil {

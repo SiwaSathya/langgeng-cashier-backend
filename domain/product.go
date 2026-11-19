@@ -1,6 +1,9 @@
 package domain
 
 import (
+	"encoding/json"
+	"fmt"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -69,6 +72,146 @@ type ProductRequestUpdate struct {
 	SupplierID string  `json:"supplier_id"`
 	CategoryID uint    `json:"category_id"`
 	BrandID    uint    `json:"brand_id"`
+}
+
+func parseUintFlex(v interface{}) uint {
+	switch val := v.(type) {
+	case float64:
+		return uint(val)
+	case int:
+		return uint(val)
+	case int64:
+		return uint(val)
+	case string:
+		n, _ := strconv.ParseUint(val, 10, 64)
+		return uint(n)
+	}
+	return 0
+}
+
+func parseFloatFlex(v interface{}) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case string:
+		f, _ := strconv.ParseFloat(val, 64)
+		return f
+	}
+	return 0
+}
+
+func parseStringFlex(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	if v != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	return ""
+}
+
+// UnmarshalJSON mendukung format snake_case, PascalCase, dan camelCase agar kompatibel 100%
+func (p *ProductRequest) UnmarshalJSON(data []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	getVal := func(keys ...string) (interface{}, bool) {
+		for _, k := range keys {
+			if v, ok := raw[k]; ok && v != nil {
+				return v, true
+			}
+		}
+		return nil, false
+	}
+
+	if v, ok := getVal("kode", "Kode"); ok {
+		p.Kode = parseStringFlex(v)
+	}
+	if v, ok := getVal("nama", "Nama"); ok {
+		p.Nama = parseStringFlex(v)
+	}
+	if v, ok := getVal("satuan", "Satuan"); ok {
+		p.Satuan = parseStringFlex(v)
+	}
+	if v, ok := getVal("saldo", "Saldo"); ok {
+		p.Saldo = parseFloatFlex(v)
+	}
+	if v, ok := getVal("h_beli", "HBeli", "hbeli", "hBeli"); ok {
+		p.HBeli = parseFloatFlex(v)
+	}
+	if v, ok := getVal("h_pokok", "HPokok", "hpokok", "hPokok"); ok {
+		p.HPokok = parseFloatFlex(v)
+	}
+	if v, ok := getVal("h_jual", "HJual", "hjual", "hJual"); ok {
+		p.HJual = parseFloatFlex(v)
+	}
+	if v, ok := getVal("supplier_id", "SupplierID", "supplierId", "SupplierId"); ok {
+		p.SupplierID = parseStringFlex(v)
+	}
+	if v, ok := getVal("category_id", "CategoryID", "categoryId", "CategoryId"); ok {
+		p.CategoryID = parseUintFlex(v)
+	}
+	if v, ok := getVal("brand_id", "BrandID", "brandId", "BrandId"); ok {
+		p.BrandID = parseUintFlex(v)
+	}
+
+	return nil
+}
+
+// UnmarshalJSON mendukung format snake_case, PascalCase, dan camelCase agar kompatibel 100%
+func (p *ProductRequestUpdate) UnmarshalJSON(data []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	getVal := func(keys ...string) (interface{}, bool) {
+		for _, k := range keys {
+			if v, ok := raw[k]; ok && v != nil {
+				return v, true
+			}
+		}
+		return nil, false
+	}
+
+	if v, ok := getVal("kode", "Kode"); ok {
+		p.Kode = parseStringFlex(v)
+	}
+	if v, ok := getVal("nama", "Nama"); ok {
+		p.Nama = parseStringFlex(v)
+	}
+	if v, ok := getVal("satuan", "Satuan"); ok {
+		p.Satuan = parseStringFlex(v)
+	}
+	if v, ok := getVal("saldo", "Saldo"); ok {
+		p.Saldo = parseFloatFlex(v)
+	}
+	if v, ok := getVal("h_beli", "HBeli", "hbeli", "hBeli"); ok {
+		p.HBeli = parseFloatFlex(v)
+	}
+	if v, ok := getVal("h_pokok", "HPokok", "hpokok", "hPokok"); ok {
+		p.HPokok = parseFloatFlex(v)
+	}
+	if v, ok := getVal("h_jual", "HJual", "hjual", "hJual"); ok {
+		p.HJual = parseFloatFlex(v)
+	}
+	if v, ok := getVal("supplier_id", "SupplierID", "supplierId", "SupplierId"); ok {
+		p.SupplierID = parseStringFlex(v)
+	}
+	if v, ok := getVal("category_id", "CategoryID", "categoryId", "CategoryId"); ok {
+		p.CategoryID = parseUintFlex(v)
+	}
+	if v, ok := getVal("brand_id", "BrandID", "brandId", "BrandId"); ok {
+		p.BrandID = parseUintFlex(v)
+	}
+
+	return nil
 }
 
 // DTO untuk Laporan Nilai & Valuasi Stok per Tanggal Tertentu (Historical Cutoff)
