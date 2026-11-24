@@ -185,6 +185,16 @@ type ReceiptResponse struct {
 	Pelunasans []PelunasanReceiptItem `json:"pelunasans"`
 }
 
+type CloseShiftTransactionRequest struct {
+	Invoice string `json:"invoice"`
+	Shift   uint   `json:"shift"`
+}
+
+type CloseShiftBulkRequest struct {
+	Invoices []string `json:"invoices"`
+	Shift    uint     `json:"shift"`
+}
+
 type UndoShiftTransactionRequest struct {
 	Invoice string `json:"invoice"`
 }

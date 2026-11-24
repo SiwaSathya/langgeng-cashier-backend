@@ -20,11 +20,14 @@ type Expense struct {
 }
 
 type ExpenseFilter struct {
-	StartDate string `query:"start_date"`
-	EndDate   string `query:"end_date"`
-	Type      string `query:"type"` // "purchase" atau "operational"
-	Location  string `query:"location"`
+	StartDate   string `query:"start_date"`
+	EndDate     string `query:"end_date"`
+	Type        string `query:"type"` // "purchase" atau "operational"
+	Location    string `query:"location"`
+	Shift       string `query:"shift"`
+	ShiftStatus string `query:"shift_status"`
 }
+
 type ExpenseRequest struct {
 	Nota      string    `json:"nota"`
 	Tanggal   time.Time `json:"tanggal"`
@@ -34,4 +37,15 @@ type ExpenseRequest struct {
 	UserID    string    `json:"user_id"`
 	Location  string    `json:"location"`
 	Shift     *uint     `json:"shift"`
+}
+
+type CloseShiftExpenseRequest struct {
+	ID    uint   `json:"id"`
+	Nota  string `json:"nota"`
+	Shift uint   `json:"shift"`
+}
+
+type CloseShiftExpenseBulkRequest struct {
+	IDs   []uint `json:"ids"`
+	Shift uint   `json:"shift"`
 }

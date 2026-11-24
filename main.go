@@ -49,7 +49,7 @@ func main() {
 	prodHandler := http.NewProductHandler(prodService)
 	purchaseHandler := http.NewPurchaseHandler(purchaseService)
 	authHandler := http.NewAuthHandler(authService, userLogService, presenceService)
-	expenseHandler := http.NewExpenseHandler(expenseService)
+	expenseHandler := http.NewExpenseHandler(expenseService, authService)
 	returHandler := http.NewReturHandler(returService)
 	attendanceHandler := http.NewAttendanceHandler(attendanceService)
 	accountingHandler := http.NewAccountingHandler(accountingService)

@@ -116,6 +116,11 @@ func (h *TransactionHandler) RegisterRoutes(app *fiber.App) {
 	api.Put("/sales/undo-shift/transaction", h.UndoShiftTransaction)
 	api.Get("/sales/shift-summary", h.GetShiftSummary)
 	api.Put("/sales/undo-shift/batch", h.UndoShiftBatch)
+
+	// --- RUTE CLOSE SHIFT MANUAL (SUPER ADMIN) ---
+	api.Put("/sales/close-shift/transaction/:invoice", h.CloseShiftTransaction)
+	api.Put("/sales/close-shift/transaction", h.CloseShiftTransaction)
+	api.Put("/sales/close-shift/bulk", h.CloseShiftBulk)
 }
 
 // UpdateSalesShift
@@ -713,5 +718,92 @@ func (h *TransactionHandler) UndoShiftBatch(c *fiber.Ctx) error {
 		"affected_sales": affected,
 		"shift":          req.Shift,
 		"date":           req.Date,
+	})
+}
+
+
+// CloseShiftTransaction melakukan close shift manual untuk satu transaksi tertentu
+func (h *TransactionHandler) CloseShiftTransaction(c *fiber.Ctx) error {
+	claims, err := h.checkSuperadmin(c)
+	if err != nil {
+		status := fiber.StatusForbidden
+		if claims == nil {
+			status = fiber.StatusUnauthorized
+		}
+		return c.Status(status).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	var req domain.CloseShiftTransactionRequest
+	_ = c.BodyParser(&req)
+	if req.Invoice == "" {
+		req.Invoice = c.Params("invoice")
+	}
+
+	invoice := strings.TrimSpace(req.Invoice)
+	if invoice == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Nomor invoice tidak boleh kosong",
+		})
+	}
+	if req.Shift == 0 {
+		req.Shift = 1
+	}
+
+	if err := h.Service.CloseShiftByInvoice(invoice, req.Shift); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": fmt.Sprintf("Transaksi nota #%s berhasil di-close shift ke Shift %d.", invoice, req.Shift),
+		"invoice": invoice,
+		"shift":   req.Shift,
+	})
+}
+
+// CloseShiftBulk melakukan close shift manual secara bulk untuk banyak transaksi sekaligus
+func (h *TransactionHandler) CloseShiftBulk(c *fiber.Ctx) error {
+	claims, err := h.checkSuperadmin(c)
+	if err != nil {
+		status := fiber.StatusForbidden
+		if claims == nil {
+			status = fiber.StatusUnauthorized
+		}
+		return c.Status(status).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	var req domain.CloseShiftBulkRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Format data request tidak valid",
+		})
+	}
+
+	if len(req.Invoices) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Pilih minimal satu transaksi untuk di-close shift",
+		})
+	}
+	if req.Shift == 0 {
+		req.Shift = 1
+	}
+
+	affected, err := h.Service.CloseShiftBulk(req.Invoices, req.Shift)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":        fmt.Sprintf("Berhasil melakukan close shift ke Shift %d untuk %d transaksi penjualan.", req.Shift, affected),
+		"affected_sales": affected,
+		"shift":          req.Shift,
+		"invoices":       req.Invoices,
 	})
 }

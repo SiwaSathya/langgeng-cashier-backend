@@ -1060,6 +1060,81 @@ func (s *TransactionService) DeleteSales(identifier string) error {
 	})
 }
 
+// CloseShiftByInvoice melakukan tutup shift manual untuk satu nota transaksi tertentu
+func (s *TransactionService) CloseShiftByInvoice(invoice string, shift uint) error {
+	invoice = strings.TrimSpace(invoice)
+	if invoice == "" {
+		return errors.New("nomor invoice tidak boleh kosong")
+	}
+	if shift == 0 {
+		return errors.New("nomor shift harus lebih besar dari 0")
+	}
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&domain.Sales{}).Where("invoice = ?", invoice).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			return errors.New("transaksi dengan nomor invoice tersebut tidak ditemukan")
+		}
+
+		// 1. Set shift pada sales transaksi ini
+		if err := tx.Exec("UPDATE sales SET shift = ? WHERE invoice = ?", shift, invoice).Error; err != nil {
+			return fmt.Errorf("gagal menutup shift transaksi: %w", err)
+		}
+
+		// 2. Set shift pada payment_methods terkait transaksi ini (DP / Pelunasan)
+		if err := tx.Exec("UPDATE payment_methods SET shift = ? WHERE sales_id IN (SELECT id FROM sales WHERE invoice = ?)", shift, invoice).Error; err != nil {
+			return fmt.Errorf("gagal menutup shift pembayaran: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// CloseShiftBulk melakukan tutup shift manual secara massal untuk daftar nota transaksi tertentu
+func (s *TransactionService) CloseShiftBulk(invoices []string, shift uint) (int64, error) {
+	if len(invoices) == 0 {
+		return 0, errors.New("daftar nomor invoice tidak boleh kosong")
+	}
+	if shift == 0 {
+		return 0, errors.New("nomor shift harus lebih besar dari 0")
+	}
+
+	var cleanInvoices []string
+	seen := make(map[string]bool)
+	for _, inv := range invoices {
+		t := strings.TrimSpace(inv)
+		if t != "" && !seen[t] {
+			seen[t] = true
+			cleanInvoices = append(cleanInvoices, t)
+		}
+	}
+	if len(cleanInvoices) == 0 {
+		return 0, errors.New("daftar invoice tidak valid")
+	}
+
+	var affectedCount int64
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		// 1. Update sales
+		res := tx.Exec("UPDATE sales SET shift = ? WHERE invoice IN (?)", shift, cleanInvoices)
+		if res.Error != nil {
+			return fmt.Errorf("gagal menutup shift penjualan: %w", res.Error)
+		}
+		affectedCount = res.RowsAffected
+
+		// 2. Update payment_methods (DP / Pelunasan)
+		if err := tx.Exec("UPDATE payment_methods SET shift = ? WHERE sales_id IN (SELECT id FROM sales WHERE invoice IN (?))", shift, cleanInvoices).Error; err != nil {
+			return fmt.Errorf("gagal menutup shift pembayaran: %w", err)
+		}
+
+		return nil
+	})
+
+	return affectedCount, err
+}
+
 // UndoShiftByInvoice membatalkan status tutup shift untuk nota transaksi tertentu (shift diset kembali ke NULL)
 func (s *TransactionService) UndoShiftByInvoice(invoice string) error {
 	invoice = strings.TrimSpace(invoice)
