@@ -155,6 +155,7 @@ type SalesFilter struct {
 	Invoice       string `query:"invoice"`
 	Status        string `query:"status"`
 	Shift         uint   `query:"shift"`
+	ShiftStatus   string `query:"shift_status"`
 	Kasir         string `query:"kasir"`
 	ProductSearch string `query:"product_search"`
 	Search        string `query:"search"`
@@ -166,13 +167,14 @@ type UpdateShiftRequest struct {
 }
 
 type PelunasanReceiptItem struct {
-	ID           uint      `json:"id"`
-	SalesID      uint      `json:"sales_id"`
-	Invoice      string    `json:"invoice"`
-	CustomerName string    `json:"customer_name"`
-	Type         string    `json:"type"`
-	Amount       float64   `json:"amount"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID            uint      `json:"id"`
+	SalesID       uint      `json:"sales_id"`
+	Invoice       string    `json:"invoice"`
+	CustomerName  string    `json:"customer_name"`
+	Type          string    `json:"type"`
+	PaymentMethod string    `json:"payment_method"`
+	Amount        float64   `json:"amount"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type ReceiptResponse struct {
@@ -181,4 +183,21 @@ type ReceiptResponse struct {
 	Sales      []Sales                `json:"sales"`
 	Expenses   []Expense              `json:"expenses"`
 	Pelunasans []PelunasanReceiptItem `json:"pelunasans"`
+}
+
+type UndoShiftTransactionRequest struct {
+	Invoice string `json:"invoice"`
+}
+
+type UndoShiftBatchRequest struct {
+	Date     string `json:"date"`
+	Shift    uint   `json:"shift"`
+	Location string `json:"location"`
+}
+
+type ShiftSummaryItem struct {
+	Shift        uint    `json:"shift"`
+	TotalSales   int64   `json:"total_sales"`
+	TotalNetto   float64 `json:"total_netto"`
+	TotalExpense float64 `json:"total_expense"`
 }

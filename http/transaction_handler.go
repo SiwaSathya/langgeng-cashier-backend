@@ -10,6 +10,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
@@ -109,6 +110,12 @@ func (h *TransactionHandler) RegisterRoutes(app *fiber.App) {
 		"/sales/update/shift",
 		h.UpdateSalesShift,
 	)
+
+	// --- RUTE UNDO SHIFT (SUPER ADMIN) ---
+	api.Put("/sales/undo-shift/transaction/:invoice", h.UndoShiftTransaction)
+	api.Put("/sales/undo-shift/transaction", h.UndoShiftTransaction)
+	api.Get("/sales/shift-summary", h.GetShiftSummary)
+	api.Put("/sales/undo-shift/batch", h.UndoShiftBatch)
 }
 
 // UpdateSalesShift
@@ -302,8 +309,14 @@ func (h *TransactionHandler) GetSales(c *fiber.Ctx) error {
 	if filter.Status == "" {
 		filter.Status = c.Query("status")
 	}
-	if filter.Shift == 0 {
-		if sVal := c.Query("shift"); sVal != "" {
+	if filter.ShiftStatus == "" {
+		filter.ShiftStatus = c.Query("shift_status")
+	}
+	if sVal := c.Query("shift"); sVal != "" {
+		if sVal == "unclosed" || sVal == "open" || sVal == "belum" {
+			filter.ShiftStatus = "unclosed"
+			filter.Shift = 0
+		} else if filter.Shift == 0 {
 			if sInt, err := strconv.Atoi(sVal); err == nil && sInt > 0 {
 				filter.Shift = uint(sInt)
 			}
@@ -585,4 +598,120 @@ func (h *TransactionHandler) LiveSales(c *fiber.Ctx) error {
 	}
 
 	return StreamSSE(c, service.GetGlobalSSE(), topic)
+}
+
+// checkSuperadmin memvalidasi bahwa pengguna yang mengakses endpoint memiliki role superadmin
+func (h *TransactionHandler) checkSuperadmin(c *fiber.Ctx) (jwt.MapClaims, error) {
+	claims, err := h.parseClaims(c)
+	if err != nil || claims == nil {
+		return nil, errors.New("otentikasi diperlukan: silakan login terlebih dahulu")
+	}
+	role := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", claims["role"])))
+	normRole := strings.ReplaceAll(strings.ReplaceAll(role, "-", ""), "_", "")
+	if normRole != "superadmin" {
+		return claims, errors.New("akses ditolak: hanya role Super Admin yang berhak membatalkan (undo) tutup shift")
+	}
+	return claims, nil
+}
+
+// UndoShiftTransaction membatalkan tutup shift untuk satu nota transaksi tertentu
+func (h *TransactionHandler) UndoShiftTransaction(c *fiber.Ctx) error {
+	claims, err := h.checkSuperadmin(c)
+	if err != nil {
+		status := fiber.StatusForbidden
+		if claims == nil {
+			status = fiber.StatusUnauthorized
+		}
+		return c.Status(status).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	invoice := strings.TrimSpace(c.Params("invoice"))
+	if invoice == "" {
+		var req domain.UndoShiftTransactionRequest
+		if err := c.BodyParser(&req); err == nil && req.Invoice != "" {
+			invoice = strings.TrimSpace(req.Invoice)
+		}
+	}
+
+	if invoice == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Nomor invoice tidak boleh kosong",
+		})
+	}
+
+	if err := h.Service.UndoShiftByInvoice(invoice); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": fmt.Sprintf("Tutup shift untuk nota #%s berhasil dibatalkan. Transaksi kembali berstatus Belum Tutup Shift.", invoice),
+		"invoice": invoice,
+	})
+}
+
+// GetShiftSummary mengambil ringkasan shift yang telah ditutup pada tanggal & lokasi tertentu
+func (h *TransactionHandler) GetShiftSummary(c *fiber.Ctx) error {
+	dateStr := strings.TrimSpace(c.Query("date"))
+	if dateStr == "" {
+		dateStr = time.Now().Format("2006-01-02")
+	}
+	location := strings.TrimSpace(c.Query("location"))
+
+	summary, err := h.Service.GetShiftSummaryByDate(dateStr, location)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"date":     dateStr,
+		"location": location,
+		"shifts":   summary,
+	})
+}
+
+// UndoShiftBatch membatalkan tutup shift secara massal untuk shift tertentu pada tanggal & lokasi yang dipilih
+func (h *TransactionHandler) UndoShiftBatch(c *fiber.Ctx) error {
+	claims, err := h.checkSuperadmin(c)
+	if err != nil {
+		status := fiber.StatusForbidden
+		if claims == nil {
+			status = fiber.StatusUnauthorized
+		}
+		return c.Status(status).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	var req domain.UndoShiftBatchRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Format data request tidak valid",
+		})
+	}
+
+	if req.Shift == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Pilih shift yang ingin dibatalkan (Shift 1, Shift 2, dst)",
+		})
+	}
+
+	affected, err := h.Service.UndoShiftBatch(req.Date, req.Shift, req.Location)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":        fmt.Sprintf("Berhasil membatalkan tutup Shift %d. %d transaksi penjualan dan pengeluaran terkait telah dikembalikan ke status Belum Tutup Shift.", req.Shift, affected),
+		"affected_sales": affected,
+		"shift":          req.Shift,
+		"date":           req.Date,
+	})
 }

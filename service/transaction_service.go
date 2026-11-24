@@ -378,6 +378,33 @@ func GroupSalesByInvoice(sales []domain.Sales) []domain.SalesTransactionGroup {
 		} else {
 			groups[i].RemainingAmount = 0
 		}
+
+		// Deduplikasi PaymentMethods dan bentuk PaymentMethod gabungan jika multi-payment
+		if len(groups[i].PaymentMethods) > 0 {
+			var uniquePms []domain.PaymentMethod
+			seenID := make(map[uint]bool)
+			seenType := make(map[string]bool)
+			var distinctTypes []string
+
+			for _, pm := range groups[i].PaymentMethods {
+				if pm.ID > 0 {
+					if seenID[pm.ID] {
+						continue
+					}
+					seenID[pm.ID] = true
+				}
+				uniquePms = append(uniquePms, pm)
+				t := strings.TrimSpace(pm.Type)
+				if t != "" && !seenType[strings.ToLower(t)] {
+					seenType[strings.ToLower(t)] = true
+					distinctTypes = append(distinctTypes, t)
+				}
+			}
+			groups[i].PaymentMethods = uniquePms
+			if len(distinctTypes) > 1 {
+				groups[i].PaymentMethod = strings.Join(distinctTypes, ", ")
+			}
+		}
 	}
 
 	return groups
@@ -434,6 +461,10 @@ func applySalesFilters(query *gorm.DB, f domain.SalesFilter) *gorm.DB {
 	// 6. Filter Shift Kerja Kasir
 	if f.Shift > 0 {
 		query = query.Where("shift = ?", f.Shift)
+	} else if f.ShiftStatus == "unclosed" || f.ShiftStatus == "open" || f.ShiftStatus == "belum" {
+		query = query.Where("shift IS NULL")
+	} else if f.ShiftStatus == "closed" || f.ShiftStatus == "sudah" {
+		query = query.Where("shift IS NOT NULL")
 	}
 
 	// 7. Filter Kasir Tertentu
@@ -692,21 +723,24 @@ func (s *TransactionService) PelunasanSales(identifier string, req domain.Peluna
 			pelunasanAmount = amountPaid
 		}
 
-		// 1. UPDATE STATUS SALES & RESET FLAG DP SERTA BON
-		updates := map[string]interface{}{
-			"status":         status,
-			"is_dp":          false,
-			"is_bon":         false,
-			"payment_method": paymentMethod,
-			"amount_paid":    amountPaid,
-			"updated_at":     time.Now(),
+		// Tentukan nama metode pelunasan yang sebenarnya dibayarkan
+		var pelunasanMethodName string
+		if len(req.PaymentMethods) > 0 && req.PaymentMethods[0].Type != "" {
+			pelunasanMethodName = strings.TrimSpace(req.PaymentMethods[0].Type)
+		} else if idxStart := strings.Index(req.PaymentMethod, "[Pelunasan:"); idxStart != -1 {
+			extracted := req.PaymentMethod[idxStart+len("[Pelunasan:"):]
+			if idxEnd := strings.Index(extracted, "]"); idxEnd != -1 {
+				pelunasanMethodName = strings.TrimSpace(extracted[:idxEnd])
+			}
+		}
+		if pelunasanMethodName == "" && req.PaymentMethod != "" && !strings.Contains(req.PaymentMethod, "[Pelunasan:") {
+			pelunasanMethodName = strings.TrimSpace(req.PaymentMethod)
+		}
+		if pelunasanMethodName == "" {
+			pelunasanMethodName = "Tunai"
 		}
 
-		if err := tx.Model(&domain.Sales{}).Where("invoice = ?", invoice).Updates(updates).Error; err != nil {
-			return err
-		}
-
-		// 2. SIMPAN CATATAN PEMBAYARAN KE TABEL payment_methods DENGAN STATUS "Pelunasan"
+		// 1. SIMPAN CATATAN PEMBAYARAN KE TABEL payment_methods DENGAN STATUS "Pelunasan"
 		primarySalesID := salesList[0].ID
 
 		if len(req.PaymentMethods) > 0 {
@@ -722,18 +756,9 @@ func (s *TransactionService) PelunasanSales(identifier string, req domain.Peluna
 				}
 			}
 		} else {
-			// Fallback parsing nama metode pelunasan dari string gabungan
-			methodType := paymentMethod
-			if idxStart := strings.Index(paymentMethod, "[Pelunasan:"); idxStart != -1 {
-				extracted := paymentMethod[idxStart+len("[Pelunasan:"):]
-				if idxEnd := strings.Index(extracted, "]"); idxEnd != -1 {
-					methodType = strings.TrimSpace(extracted[:idxEnd])
-				}
-			}
-
 			record := domain.PaymentMethod{
 				SalesID: primarySalesID,
-				Type:    methodType,
+				Type:    pelunasanMethodName,
 				Amount:  fmt.Sprintf("%.0f", pelunasanAmount),
 				Status:  "Pelunasan",
 			}
@@ -742,13 +767,44 @@ func (s *TransactionService) PelunasanSales(identifier string, req domain.Peluna
 			}
 		}
 
+		// Kumpulkan seluruh metode pembayaran unik untuk invoice ini (DP awal + Pelunasan)
+		var allPms []domain.PaymentMethod
+		_ = tx.Where("sales_id IN (SELECT id FROM sales WHERE invoice = ?)", invoice).Find(&allPms).Error
+		var distinctMethods []string
+		seenMethods := make(map[string]bool)
+		for _, pm := range allPms {
+			t := strings.TrimSpace(pm.Type)
+			if t != "" && !seenMethods[strings.ToLower(t)] {
+				seenMethods[strings.ToLower(t)] = true
+				distinctMethods = append(distinctMethods, t)
+			}
+		}
+		finalCombinedPaymentMethod := strings.Join(distinctMethods, ", ")
+		if finalCombinedPaymentMethod == "" {
+			finalCombinedPaymentMethod = pelunasanMethodName
+		}
+
+		// 2. UPDATE STATUS SALES & RESET FLAG DP SERTA BON
+		updates := map[string]interface{}{
+			"status":         status,
+			"is_dp":          false,
+			"is_bon":         false,
+			"payment_method": finalCombinedPaymentMethod,
+			"amount_paid":    amountPaid,
+			"updated_at":     time.Now(),
+		}
+
+		if err := tx.Model(&domain.Sales{}).Where("invoice = ?", invoice).Updates(updates).Error; err != nil {
+			return err
+		}
+
 		if err := tx.Preload("Product").Preload("Customer").Preload("PaymentMethods").Where("invoice = ?", invoice).Find(&salesList).Error; err != nil {
 			return err
 		}
 
-		// 3. UPDATE JURNAL & SETTLEMENT PIUTANG
+		// 3. UPDATE JURNAL & SETTLEMENT PIUTANG (Gunakan pelunasanMethodName agar akurat masuk ke rekening pelunasan)
 		if s.AccountingSvc != nil {
-			s.AccountingSvc.AutoPostSalesJournal(tx, invoice, paymentMethod, pelunasanAmount, pelunasanAmount, false, time.Now())
+			s.AccountingSvc.AutoPostSalesJournal(tx, invoice, pelunasanMethodName, pelunasanAmount, pelunasanAmount, false, time.Now())
 			s.AccountingSvc.AutoSettleSalesPiutang(tx, invoice, pelunasanAmount)
 		}
 
@@ -827,6 +883,9 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 
 	if strings.EqualFold(loc, "Semua Toko") {
 		salesQuery = salesQuery.Where("is_returs = ?", false)
+	} else if strings.EqualFold(loc, "Toko Utama") {
+		salesQuery = salesQuery.Where("(location = ? OR location = '' OR location IS NULL)", "Toko Utama").Where("is_returs = ?", false)
+		expenseQuery = expenseQuery.Where("(location = ? OR location = '' OR location IS NULL)", "Toko Utama")
 	} else {
 		salesQuery = salesQuery.Where("location = ?", loc).Where("is_returs = ?", false)
 		expenseQuery = expenseQuery.Where("location = ?", loc)
@@ -842,16 +901,21 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 
 	// Ambil data penerimaan Pelunasan yang belum terikat shift
 	var pelunasanMethods []domain.PaymentMethod
-	pelQuery := s.DB.Preload("Sales.Customer").
-		Where("status = ?", "Pelunasan").
-		Where("shift IS NULL")
+	pelQuery := s.DB.Preload("Sales").Preload("Sales.Customer").
+		Where("payment_methods.status = ?", "Pelunasan").
+		Where("payment_methods.shift IS NULL")
 
 	if !strings.EqualFold(loc, "Semua Toko") {
-		pelQuery = pelQuery.Joins("JOIN sales ON sales.id = payment_methods.sales_id").
-			Where("(sales.location = ? OR (sales.location = '' AND ? = 'Toko Utama'))", loc, loc)
+		if strings.EqualFold(loc, "Toko Utama") {
+			pelQuery = pelQuery.Where("payment_methods.sales_id IN (SELECT id FROM sales WHERE (location = 'Toko Utama' OR location = '' OR location IS NULL))")
+		} else {
+			pelQuery = pelQuery.Where("payment_methods.sales_id IN (SELECT id FROM sales WHERE location = ?)", loc)
+		}
 	}
 
-	_ = pelQuery.Find(&pelunasanMethods).Error
+	if err := pelQuery.Find(&pelunasanMethods).Error; err != nil {
+		return nil, err
+	}
 
 	pelunasanItems := make([]domain.PelunasanReceiptItem, 0)
 	for _, pm := range pelunasanMethods {
@@ -861,13 +925,14 @@ func (s *TransactionService) GetReceipt(location string) (*domain.ReceiptRespons
 		custName = pm.Sales.Customer.Name
 		}
 		pelunasanItems = append(pelunasanItems, domain.PelunasanReceiptItem{
-			ID:           pm.ID,
-			SalesID:      pm.SalesID,
-			Invoice:      pm.Sales.Invoice,
-			CustomerName: custName,
-			Type:         pm.Type,
-			Amount:       amt,
-			CreatedAt:    pm.CreatedAt,
+			ID:            pm.ID,
+			SalesID:       pm.SalesID,
+			Invoice:       pm.Sales.Invoice,
+			CustomerName:  custName,
+			Type:          pm.Type,
+			PaymentMethod: pm.Type,
+			Amount:        amt,
+			CreatedAt:     pm.CreatedAt,
 		})
 	}
 
@@ -892,7 +957,11 @@ func (s *TransactionService) UpdateSalesShift(shift uint, location string) error
 		// 1. Update shift pada data Sales yang belum memiliki shift
 		salesQuery := tx.Model(&domain.Sales{}).Where("shift IS NULL")
 		if !strings.EqualFold(loc, "Semua Toko") {
-			salesQuery = salesQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+			if strings.EqualFold(loc, "Toko Utama") {
+				salesQuery = salesQuery.Where("(location = ? OR location = '' OR location IS NULL)", "Toko Utama")
+			} else {
+				salesQuery = salesQuery.Where("location = ?", loc)
+			}
 		}
 
 		if err := salesQuery.Update("shift", shift).Error; err != nil {
@@ -902,7 +971,11 @@ func (s *TransactionService) UpdateSalesShift(shift uint, location string) error
 		// 2. Update shift pada data Expense (Pengeluaran) yang belum memiliki shift
 		expenseQuery := tx.Model(&domain.Expense{}).Where("shift IS NULL")
 		if !strings.EqualFold(loc, "Semua Toko") {
-			expenseQuery = expenseQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+			if strings.EqualFold(loc, "Toko Utama") {
+				expenseQuery = expenseQuery.Where("(location = ? OR location = '' OR location IS NULL)", "Toko Utama")
+			} else {
+				expenseQuery = expenseQuery.Where("location = ?", loc)
+			}
 		}
 
 		if err := expenseQuery.Update("shift", shift).Error; err != nil {
@@ -914,8 +987,12 @@ func (s *TransactionService) UpdateSalesShift(shift uint, location string) error
 			if err := tx.Exec("UPDATE payment_methods SET shift = ? WHERE status = 'Pelunasan' AND shift IS NULL", shift).Error; err != nil {
 				return fmt.Errorf("gagal memperbarui shift pelunasan: %w", err)
 			}
+		} else if strings.EqualFold(loc, "Toko Utama") {
+			if err := tx.Exec("UPDATE payment_methods SET shift = ? WHERE status = 'Pelunasan' AND shift IS NULL AND sales_id IN (SELECT id FROM sales WHERE location = 'Toko Utama' OR location = '' OR location IS NULL)", shift).Error; err != nil {
+				return fmt.Errorf("gagal memperbarui shift pelunasan: %w", err)
+			}
 		} else {
-			if err := tx.Exec("UPDATE payment_methods SET shift = ? WHERE status = 'Pelunasan' AND shift IS NULL AND sales_id IN (SELECT id FROM sales WHERE location = ? OR (location = '' AND ? = 'Toko Utama'))", shift, loc, loc).Error; err != nil {
+			if err := tx.Exec("UPDATE payment_methods SET shift = ? WHERE status = 'Pelunasan' AND shift IS NULL AND sales_id IN (SELECT id FROM sales WHERE location = ?)", shift, loc).Error; err != nil {
 				return fmt.Errorf("gagal memperbarui shift pelunasan: %w", err)
 			}
 		}
@@ -981,4 +1058,171 @@ func (s *TransactionService) DeleteSales(identifier string) error {
 		// 4. Hapus baris penjualan
 		return tx.Where("invoice = ?", invoice).Delete(&domain.Sales{}).Error
 	})
+}
+
+// UndoShiftByInvoice membatalkan status tutup shift untuk nota transaksi tertentu (shift diset kembali ke NULL)
+func (s *TransactionService) UndoShiftByInvoice(invoice string) error {
+	invoice = strings.TrimSpace(invoice)
+	if invoice == "" {
+		return errors.New("nomor invoice tidak boleh kosong")
+	}
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&domain.Sales{}).Where("invoice = ?", invoice).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			return errors.New("transaksi dengan nomor invoice tersebut tidak ditemukan")
+		}
+
+		// 1. Reset shift pada sales transaksi ini menjadi NULL
+		if err := tx.Exec("UPDATE sales SET shift = NULL WHERE invoice = ?", invoice).Error; err != nil {
+			return fmt.Errorf("gagal membatalkan shift transaksi: %w", err)
+		}
+
+		// 2. Reset shift pada payment_methods terkait transaksi ini menjadi NULL
+		if err := tx.Exec("UPDATE payment_methods SET shift = NULL WHERE sales_id IN (SELECT id FROM sales WHERE invoice = ?)", invoice).Error; err != nil {
+			return fmt.Errorf("gagal membatalkan shift pembayaran: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// GetShiftSummaryByDate mengambil daftar shift yang sudah ditutup pada tanggal dan lokasi tertentu
+func (s *TransactionService) GetShiftSummaryByDate(dateStr, location string) ([]domain.ShiftSummaryItem, error) {
+	loc := strings.TrimSpace(location)
+	if loc == "" || strings.EqualFold(loc, "Pusat") {
+		loc = "Toko Utama"
+	}
+	parsedDate := strings.TrimSpace(dateStr)
+	if parsedDate == "" {
+		parsedDate = time.Now().Format("2006-01-02")
+	}
+	startDay := parsedDate + " 00:00:00"
+	endDay := parsedDate + " 23:59:59"
+
+	type shiftRow struct {
+		Shift      uint    `gorm:"column:shift"`
+		TotalSales int64   `gorm:"column:total_sales"`
+		TotalNetto float64 `gorm:"column:total_netto"`
+	}
+	var rows []shiftRow
+
+	query := s.DB.Table("sales").
+		Select("shift, COUNT(DISTINCT invoice) as total_sales, COALESCE(SUM(total_netto), 0) as total_netto").
+		Where("created_at BETWEEN ? AND ? AND shift IS NOT NULL AND shift > 0", startDay, endDay)
+
+	if !strings.EqualFold(loc, "Semua Toko") {
+		query = query.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+	}
+
+	if err := query.Group("shift").Order("shift ASC").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	// Ambil juga pengeluaran per shift
+	type expenseRow struct {
+		Shift        uint    `gorm:"column:shift"`
+		TotalExpense float64 `gorm:"column:total_expense"`
+	}
+	var expRows []expenseRow
+	expQuery := s.DB.Table("expenses").
+		Select("shift, COALESCE(SUM(total), 0) as total_expense").
+		Where("tanggal BETWEEN ? AND ? AND shift IS NOT NULL AND shift > 0", startDay, endDay)
+
+	if !strings.EqualFold(loc, "Semua Toko") {
+		expQuery = expQuery.Where("(location = ? OR (location = '' AND ? = 'Toko Utama'))", loc, loc)
+	}
+	_ = expQuery.Group("shift").Scan(&expRows)
+	expMap := make(map[uint]float64)
+	for _, er := range expRows {
+		expMap[er.Shift] = er.TotalExpense
+	}
+
+	result := make([]domain.ShiftSummaryItem, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, domain.ShiftSummaryItem{
+			Shift:        r.Shift,
+			TotalSales:   r.TotalSales,
+			TotalNetto:   r.TotalNetto,
+			TotalExpense: expMap[r.Shift],
+		})
+	}
+
+	return result, nil
+}
+
+// UndoShiftBatch membatalkan seluruh tutup shift pada tanggal, lokasi, dan shift tertentu (diset kembali ke NULL)
+func (s *TransactionService) UndoShiftBatch(dateStr string, shift uint, location string) (int64, error) {
+	if shift == 0 {
+		return 0, errors.New("nomor shift tidak valid")
+	}
+	loc := strings.TrimSpace(location)
+	if loc == "" || strings.EqualFold(loc, "Pusat") {
+		loc = "Toko Utama"
+	}
+	parsedDate := strings.TrimSpace(dateStr)
+	if parsedDate == "" {
+		parsedDate = time.Now().Format("2006-01-02")
+	}
+	startDay := parsedDate + " 00:00:00"
+	endDay := parsedDate + " 23:59:59"
+
+	var affectedSales int64
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		// 1. Reset shift pada sales
+		var salesSQL string
+		var salesArgs []interface{}
+		if strings.EqualFold(loc, "Semua Toko") {
+			salesSQL = "UPDATE sales SET shift = NULL WHERE shift = ? AND created_at BETWEEN ? AND ?"
+			salesArgs = []interface{}{shift, startDay, endDay}
+		} else if strings.EqualFold(loc, "Toko Utama") {
+			salesSQL = "UPDATE sales SET shift = NULL WHERE shift = ? AND created_at BETWEEN ? AND ? AND (location = 'Toko Utama' OR location = '' OR location IS NULL)"
+			salesArgs = []interface{}{shift, startDay, endDay}
+		} else {
+			salesSQL = "UPDATE sales SET shift = NULL WHERE shift = ? AND created_at BETWEEN ? AND ? AND location = ?"
+			salesArgs = []interface{}{shift, startDay, endDay, loc}
+		}
+		res := tx.Exec(salesSQL, salesArgs...)
+		if res.Error != nil {
+			return fmt.Errorf("gagal membatalkan shift penjualan: %w", res.Error)
+		}
+		affectedSales = res.RowsAffected
+
+		// 2. Reset shift pada payment_methods (pelunasan)
+		if strings.EqualFold(loc, "Semua Toko") {
+			if err := tx.Exec("UPDATE payment_methods SET shift = NULL WHERE shift = ? AND created_at BETWEEN ? AND ?", shift, startDay, endDay).Error; err != nil {
+				return fmt.Errorf("gagal membatalkan shift pelunasan: %w", err)
+			}
+		} else if strings.EqualFold(loc, "Toko Utama") {
+			if err := tx.Exec("UPDATE payment_methods SET shift = NULL WHERE shift = ? AND created_at BETWEEN ? AND ? AND sales_id IN (SELECT id FROM sales WHERE location = 'Toko Utama' OR location = '' OR location IS NULL)", shift, startDay, endDay).Error; err != nil {
+				return fmt.Errorf("gagal membatalkan shift pelunasan: %w", err)
+			}
+		} else {
+			if err := tx.Exec("UPDATE payment_methods SET shift = NULL WHERE shift = ? AND created_at BETWEEN ? AND ? AND sales_id IN (SELECT id FROM sales WHERE location = ?)", shift, startDay, endDay, loc).Error; err != nil {
+				return fmt.Errorf("gagal membatalkan shift pelunasan: %w", err)
+			}
+		}
+
+		// 3. Reset shift pada expenses (menggunakan kolom tanggal)
+		if strings.EqualFold(loc, "Semua Toko") {
+			if err := tx.Exec("UPDATE expenses SET shift = NULL WHERE shift = ? AND tanggal BETWEEN ? AND ?", shift, startDay, endDay).Error; err != nil {
+				return fmt.Errorf("gagal membatalkan shift pengeluaran: %w", err)
+			}
+		} else if strings.EqualFold(loc, "Toko Utama") {
+			if err := tx.Exec("UPDATE expenses SET shift = NULL WHERE shift = ? AND tanggal BETWEEN ? AND ? AND (location = 'Toko Utama' OR location = '' OR location IS NULL)", shift, startDay, endDay).Error; err != nil {
+				return fmt.Errorf("gagal membatalkan shift pengeluaran: %w", err)
+			}
+		} else {
+			if err := tx.Exec("UPDATE expenses SET shift = NULL WHERE shift = ? AND tanggal BETWEEN ? AND ? AND location = ?", shift, startDay, endDay, loc).Error; err != nil {
+				return fmt.Errorf("gagal membatalkan shift pengeluaran: %w", err)
+			}
+		}
+
+		return nil
+	})
+
+	return affectedSales, err
 }
