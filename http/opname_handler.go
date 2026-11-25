@@ -2,6 +2,7 @@ package http
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -33,6 +34,8 @@ func (h *OpnameHandler) RegisterRoutes(app fiber.Router) {
 	group.Post("/", h.CreateSession)
 	group.Get("/", h.ListSessions)
 	group.Get("/live", h.LiveGlobal)
+	group.Get("/sync-global-preview", h.GetGlobalSyncPreview)
+	group.Post("/sync-global-stock", h.SyncGlobalStock)
 	group.Get("/:id/live", h.LiveSession)
 	group.Get("/:id", h.GetSession)
 	group.Put("/:id/items/:product_id", h.UpdateCountItem)
@@ -45,6 +48,16 @@ func (h *OpnameHandler) RegisterRoutes(app fiber.Router) {
 	prodGroup := app.Group("api/products")
 	prodGroup.Get("/:id/stocks", h.GetProductStockBreakdown)
 	prodGroup.Get("/:id/stock-card", h.GetStockCard)
+}
+
+// checkSuperadmin memastikan request hanya dapat diakses oleh role superadmin
+func checkSuperadmin(c *fiber.Ctx) error {
+	_, role := resolveUser(c)
+	normRole := strings.ReplaceAll(strings.ReplaceAll(role, "-", ""), "_", "")
+	if normRole != "superadmin" {
+		return errors.New("Akses ditolak: Fitur Stock Opname hanya dapat diakses oleh Super Admin")
+	}
+	return nil
 }
 
 // resolveUserID mengekstrak User ID dari JWT token, header X-User-ID, atau default SYSTEM
@@ -81,8 +94,50 @@ func resolveUser(c *fiber.Ctx) (string, string) {
 	return userID, userRole
 }
 
+// GET /api/stock-opnames/sync-global-preview: Preview sinkronisasi stok global dari hasil SO
+func (h *OpnameHandler) GetGlobalSyncPreview(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	preview, err := h.Service.GetGlobalStockSyncPreview()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Gagal memuat preview sinkronisasi stok global: " + err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"data": preview,
+	})
+}
+
+// POST /api/stock-opnames/sync-global-stock: Eksekusi sinkronisasi stok global dari total hasil SO cabang & gudang
+func (h *OpnameHandler) SyncGlobalStock(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	userID, _ := resolveUser(c)
+	result, err := h.Service.SyncGlobalStockFromOpname(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+			"data":  result,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": fmt.Sprintf("Sinkronisasi selesai: %d produk diperbarui (%d naik, %d turun, %d tetap)", result.TotalChanged, result.TotalRaised, result.TotalLowered, result.TotalUnchanged),
+		"data":    result,
+	})
+}
+
 // POST /api/stock-opnames: Membuka sesi baru Stock Opname
 func (h *OpnameHandler) CreateSession(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	var req domain.CreateOpnameSessionRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -111,6 +166,9 @@ func (h *OpnameHandler) CreateSession(c *fiber.Ctx) error {
 
 // GET /api/stock-opnames: Menampilkan daftar sesi opname
 func (h *OpnameHandler) ListSessions(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	location := c.Query("location")
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.Query("page", "1"))
@@ -140,6 +198,9 @@ func (h *OpnameHandler) ListSessions(c *fiber.Ctx) error {
 
 // GET /api/stock-opnames/:id: Mengambil detail satu sesi opname
 func (h *OpnameHandler) GetSession(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil || id <= 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -161,6 +222,9 @@ func (h *OpnameHandler) GetSession(c *fiber.Ctx) error {
 
 // PUT /api/stock-opnames/:id/items/:product_id: Input/update hasil hitung fisik barang
 func (h *OpnameHandler) UpdateCountItem(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil || id <= 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -197,6 +261,9 @@ func (h *OpnameHandler) UpdateCountItem(c *fiber.Ctx) error {
 
 // POST /api/stock-opnames/:id/upload-photo: Upload foto bukti fisik ke MinIO / local storage
 func (h *OpnameHandler) UploadPhoto(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	file, err := c.FormFile("photo")
 	if err != nil {
 		file, err = c.FormFile("file")
@@ -231,6 +298,9 @@ func (h *OpnameHandler) UploadPhoto(c *fiber.Ctx) error {
 
 // POST /api/stock-opnames/:id/submit: Mengajukan sesi opname untuk approval supervisor
 func (h *OpnameHandler) SubmitForApproval(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil || id <= 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -256,6 +326,9 @@ func (h *OpnameHandler) SubmitForApproval(c *fiber.Ctx) error {
 
 // POST /api/stock-opnames/:id/approve: Menyetujui opname dan mengeksekusi penyesuaian stok cabang
 func (h *OpnameHandler) ApproveSession(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil || id <= 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -263,14 +336,7 @@ func (h *OpnameHandler) ApproveSession(c *fiber.Ctx) error {
 		})
 	}
 
-	approverID, role := resolveUser(c)
-
-	// Validasi role: Kasir biasa tidak boleh approve
-	if role == "kasir" || role == "supersubkasir" {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Akses ditolak: Persetujuan Stock Opname hanya dapat dilakukan oleh Supervisor atau Admin",
-		})
-	}
+	approverID, _ := resolveUser(c)
 
 	opname, err := h.Service.ApproveSession(uint(id), approverID)
 	if err != nil {
@@ -287,6 +353,9 @@ func (h *OpnameHandler) ApproveSession(c *fiber.Ctx) error {
 
 // POST /api/stock-opnames/:id/cancel: Membatalkan sesi opname
 func (h *OpnameHandler) CancelSession(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil || id <= 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -368,9 +437,11 @@ func (h *OpnameHandler) GetStockCard(c *fiber.Ctx) error {
 	})
 }
 
-
 // LiveSession menyiarkan event live real-time (SSE) untuk sesi stock opname tertentu
 func (h *OpnameHandler) LiveSession(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	sessionIDStr := c.Params("id")
 	sessionID, err := strconv.ParseUint(sessionIDStr, 10, 32)
 	if err != nil {
@@ -423,6 +494,9 @@ func (h *OpnameHandler) LiveSession(c *fiber.Ctx) error {
 
 // LiveGlobal menyiarkan event global (seperti pembuatan sesi baru atau perubahan status dokumen)
 func (h *OpnameHandler) LiveGlobal(c *fiber.Ctx) error {
+	if err := checkSuperadmin(c); err != nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+	}
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")

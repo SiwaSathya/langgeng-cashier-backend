@@ -25,6 +25,23 @@ type Product struct {
 	BrandID    uint
 	Brand      Brand
 	Stocks     []ProductStock `gorm:"foreignKey:ProductID" json:"stocks,omitempty"`
+	Images     []ProductImage `gorm:"foreignKey:ProductID" json:"images,omitempty"`
+}
+
+// ProductImage menyimpan banyak foto produk per cabang / toko
+type ProductImage struct {
+	gorm.Model
+	ProductID uint   `gorm:"index;not null" json:"product_id"`
+	Location  string `gorm:"size:100;index" json:"location"` // Lokasi spesifik foto toko diambil
+	ImageURL  string `gorm:"size:500;not null" json:"image_url"`
+	Caption   string `gorm:"size:255" json:"caption"`
+
+	// Metadata tambahan untuk foto bukti dari Stock Opname (non-DB)
+	Source          string     `gorm:"-" json:"source,omitempty"`            // "manual" atau "opname"
+	OpnameID        uint       `gorm:"-" json:"opname_id,omitempty"`         // ID sesi Stock Opname
+	OpnameNo        string     `gorm:"-" json:"opname_no,omitempty"`         // Nomor dokumen Stock Opname
+	OpnameStatus    string     `gorm:"-" json:"opname_status,omitempty"`     // Status dokumen SO
+	OpnameCreatedAt *time.Time `gorm:"-" json:"opname_created_at,omitempty"` // Waktu sesi SO dibuat
 }
 
 type ProductResponse struct {
@@ -46,6 +63,7 @@ type ProductResponse struct {
 	BrandID    uint           `json:"brand_id,omitempty"`
 	Brand      Brand          `json:"brand,omitempty"`
 	Stocks     []ProductStock `json:"stocks,omitempty"`
+	Images     []ProductImage `json:"images,omitempty"`
 }
 
 type ProductRequest struct {

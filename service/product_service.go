@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,7 +30,8 @@ func (s *ProductService) GetAll(search string, page int, limit int) ([]domain.Pr
 		Preload("Category").
 		Preload("Brand").
 		Preload("Supplier").
-		Preload("Stocks").
+		Preload("Stocks", "location IN ?", OfficialStockLocations).
+		Preload("Images").
 		Order("id desc")
 
 	if search != "" {
@@ -146,7 +148,7 @@ func (s *ProductService) Delete(id string) error {
 // GET BY ID: Ambil satu produk untuk diedit
 func (s *ProductService) GetByID(id string) (domain.Product, error) {
 	var product domain.Product
-	err := s.DB.Preload("Category").Preload("Brand").Preload("Supplier").Preload("Stocks").First(&product, id).Error
+	err := s.DB.Preload("Category").Preload("Brand").Preload("Supplier").Preload("Stocks", "location IN ?", OfficialStockLocations).Preload("Images").First(&product, id).Error
 	return product, err
 }
 
@@ -330,4 +332,134 @@ func (s *ProductService) ExportHistoricalStockExcel(cutoffDateStr, location, sea
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// AddProductImage menambahkan foto baru ke produk (bisa per lokasi)
+func (s *ProductService) AddProductImage(productID uint, location string, imageURL string, caption string) (*domain.ProductImage, error) {
+	if imageURL == "" {
+		return nil, errors.New("URL gambar tidak boleh kosong")
+	}
+	var count int64
+	s.DB.Model(&domain.Product{}).Where("id = ?", productID).Count(&count)
+	if count == 0 {
+		return nil, errors.New("produk tidak ditemukan")
+	}
+
+	normLoc := location
+	if strings.TrimSpace(normLoc) != "" {
+		normLoc = NormalizeStockLocation(normLoc)
+	}
+
+	img := domain.ProductImage{
+		ProductID: productID,
+		Location:  normLoc,
+		ImageURL:  imageURL,
+		Caption:   caption,
+		Source:    "manual",
+	}
+	if err := s.DB.Create(&img).Error; err != nil {
+		return nil, err
+	}
+	return &img, nil
+}
+
+// DeleteProductImage menghapus foto produk berdasarkan ID
+func (s *ProductService) DeleteProductImage(imageID uint) error {
+	return s.DB.Delete(&domain.ProductImage{}, imageID).Error
+}
+
+// GetProductImages mengambil seluruh foto produk (foto manual + foto bukti Stock Opname), bisa difilter lokasi
+func (s *ProductService) GetProductImages(productID uint, location string) ([]domain.ProductImage, error) {
+	filterLoc := ""
+	if strings.TrimSpace(location) != "" && location != "Semua Lokasi" {
+		filterLoc = NormalizeStockLocation(location)
+	}
+
+	var manualImages []domain.ProductImage
+	query := s.DB.Where("product_id = ?", productID)
+	if filterLoc != "" {
+		query = query.Where("(location = ? OR location = '' OR location IS NULL)", filterLoc)
+	}
+	if err := query.Order("id desc").Find(&manualImages).Error; err != nil {
+		return nil, err
+	}
+
+	results := make([]domain.ProductImage, 0, len(manualImages))
+	seenURLs := make(map[string]bool, len(manualImages))
+	for i := range manualImages {
+		manualImages[i].Source = "manual"
+		if strings.TrimSpace(manualImages[i].Location) != "" {
+			manualImages[i].Location = NormalizeStockLocation(manualImages[i].Location)
+		}
+		results = append(results, manualImages[i])
+		seenURLs[manualImages[i].ImageURL] = true
+	}
+
+	// Gabungkan foto bukti yang diunggah melalui fitur Stock Opname beserta ID SO & waktu dibuatnya
+	type opnamePhotoRow struct {
+		ItemID        uint
+		StockOpnameID uint
+		OpnameNo      string
+		Location      string
+		Status        string
+		SOCreatedAt   time.Time
+		PhotoURL      string
+		Notes         string
+		UpdatedAt     time.Time
+	}
+	var soRows []opnamePhotoRow
+	_ = s.DB.Table("stock_opname_items AS soi").
+		Select("soi.id AS item_id, soi.stock_opname_id, so.opname_no, so.location, so.status, so.created_at AS so_created_at, soi.photo_url, soi.notes, soi.updated_at").
+		Joins("JOIN stock_opnames AS so ON so.id = soi.stock_opname_id").
+		Where("soi.product_id = ? AND soi.photo_url IS NOT NULL AND soi.photo_url <> '' AND soi.deleted_at IS NULL AND so.deleted_at IS NULL AND so.status <> ?", productID, "Cancelled").
+		Order("so.created_at DESC, soi.updated_at DESC").
+		Scan(&soRows).Error
+
+	for _, r := range soRows {
+		normLoc := NormalizeStockLocation(r.Location)
+		if filterLoc != "" && normLoc != filterLoc {
+			continue
+		}
+		if seenURLs[r.PhotoURL] {
+			continue
+		}
+		seenURLs[r.PhotoURL] = true
+
+		soCreated := r.SOCreatedAt
+		caption := fmt.Sprintf("Bukti SO %s (%s)", r.OpnameNo, r.Status)
+		if strings.TrimSpace(r.Notes) != "" {
+			caption += " — " + strings.TrimSpace(r.Notes)
+		}
+
+		img := domain.ProductImage{
+			ProductID:       productID,
+			Location:        normLoc,
+			ImageURL:        r.PhotoURL,
+			Caption:         caption,
+			Source:          "opname",
+			OpnameID:        r.StockOpnameID,
+			OpnameNo:        r.OpnameNo,
+			OpnameStatus:    r.Status,
+			OpnameCreatedAt: &soCreated,
+		}
+		img.CreatedAt = r.UpdatedAt
+		if img.CreatedAt.IsZero() {
+			img.CreatedAt = r.SOCreatedAt
+		}
+		results = append(results, img)
+	}
+
+	sort.SliceStable(results, func(i, j int) bool {
+		ti := results[i].CreatedAt
+		if results[i].OpnameCreatedAt != nil && ti.IsZero() {
+			ti = *results[i].OpnameCreatedAt
+		}
+		tj := results[j].CreatedAt
+		if results[j].OpnameCreatedAt != nil && tj.IsZero() {
+			tj = *results[j].OpnameCreatedAt
+		}
+		return ti.After(tj)
+	})
+
+	return results, nil
 }

@@ -29,14 +29,28 @@ type MinIOStorageService struct {
 
 func NewStorageService() StorageService {
 	endpoint := strings.TrimSpace(os.Getenv("MINIO_ENDPOINT"))
+	if endpoint == "" {
+		endpoint = strings.TrimSpace(os.Getenv("MINIO_URL"))
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+	}
 	accessKey := strings.TrimSpace(os.Getenv("MINIO_ACCESS_KEY"))
+	if accessKey == "" {
+		accessKey = strings.TrimSpace(os.Getenv("MINIO_KEY"))
+	}
 	secretKey := strings.TrimSpace(os.Getenv("MINIO_SECRET_KEY"))
+	if secretKey == "" {
+		secretKey = strings.TrimSpace(os.Getenv("MINIO_SECRET"))
+	}
 	bucket := strings.TrimSpace(os.Getenv("MINIO_BUCKET"))
 	if bucket == "" {
 		bucket = "stock-opname"
 	}
 	useSSL := strings.ToLower(strings.TrimSpace(os.Getenv("MINIO_USE_SSL"))) == "true"
 	publicURL := strings.TrimRight(strings.TrimSpace(os.Getenv("MINIO_PUBLIC_URL")), "/")
+	if publicURL == "" && os.Getenv("MINIO_URL") != "" {
+		publicURL = strings.TrimRight(strings.TrimSpace(os.Getenv("MINIO_URL")), "/")
+	}
 	uploadDir := strings.TrimSpace(os.Getenv("UPLOAD_DIR"))
 	if uploadDir == "" {
 		uploadDir = "./uploads"

@@ -84,6 +84,7 @@ func RegisterTableToMigrate(db *gorm.DB) {
 		&domain.PiutangDagang{},
 		&domain.PaymentMethod{},
 		&domain.ProductStock{},
+		&domain.ProductImage{},
 		&domain.StockMovement{},
 		&domain.StockOpname{},
 		&domain.StockOpnameItem{},

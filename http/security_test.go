@@ -134,3 +134,32 @@ func TestClickjackingDefenseHeaders(t *testing.T) {
 		t.Fatalf("Content-Security-Policy harus mengandung frame-ancestors 'none', got: %s", csp)
 	}
 }
+
+func TestMultipartUploadAllowedThroughSecurityFirewall(t *testing.T) {
+	app := fiber.New()
+	app.Use(http.SQLInjectionFirewallMiddleware())
+	app.Use(http.XSSSanitizerMiddleware())
+
+	app.Post("/upload", func(c *fiber.Ctx) error {
+		return c.SendString("UPLOADED")
+	})
+
+	// Boundary multipart standar mengandung '------' yang sebelumnya memicu SQLi regex '--'
+	multipartBody := "------WebKitFormBoundary7MA4YWxkTrZu0gW\r\n" +
+		"Content-Disposition: form-data; name=\"photo\"; filename=\"opname.png\"\r\n" +
+		"Content-Type: image/png\r\n\r\n" +
+		"fake-png-binary--bytes<script>not-html</script>\r\n" +
+		"------WebKitFormBoundary7MA4YWxkTrZu0gW--\r\n"
+
+	req := httptest.NewRequest("POST", "/upload", strings.NewReader(multipartBody))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Multipart test error: %v", err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Multipart upload tidak boleh diblokir SQLi/XSS middleware (expected 200), got %d: %s", resp.StatusCode, string(body))
+	}
+}

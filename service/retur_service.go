@@ -288,14 +288,28 @@ func (s *returService) BatalkanRetur(id uint) (*domain.Retur, error) {
 
 		qtyDibatalkan := 1
 
-		// Kembalikan quantity ke transaksi Sales semula
-		if err := tx.Model(&domain.Sales{}).Where("id = ?", retur.SalesID).Update("qty", gorm.Expr("qty + ?", qtyDibatalkan)).Error; err != nil {
-			return err
+		// Kembalikan quantity ke transaksi Sales semula jika berasal dari nota sales
+		if retur.SalesID != nil && *retur.SalesID > 0 {
+			if err := tx.Model(&domain.Sales{}).Where("id = ?", retur.SalesID).Update("qty", gorm.Expr("qty + ?", qtyDibatalkan)).Error; err != nil {
+				return err
+			}
+		}
+
+		prodID := retur.Sales.ProductID
+		if prodID == 0 && retur.ProductID != nil {
+			prodID = *retur.ProductID
+		}
+		loc := retur.Sales.Location
+		if loc == "" {
+			loc = "Toko Utama"
 		}
 
 		// Kurangi stok product di toko (karena barang dibawa pulang lagi oleh customer)
-		if err := tx.Model(&domain.Product{}).Where("id = ?", retur.Sales.ProductID).Update("saldo", gorm.Expr("saldo - ?", qtyDibatalkan)).Error; err != nil {
-			return err
+		if prodID > 0 {
+			if err := tx.Model(&domain.Product{}).Where("id = ?", prodID).Update("saldo", gorm.Expr("saldo - ?", qtyDibatalkan)).Error; err != nil {
+				return err
+			}
+			_ = AdjustProductStock(tx, prodID, loc, -float64(qtyDibatalkan), "RETUR_CANCEL", fmt.Sprintf("Batal Retur (#%d)", retur.ID), retur.Reason, "SYSTEM")
 		}
 
 		retur.Status = "Retur Dibatalkan"
@@ -318,9 +332,21 @@ func (s *returService) KirimKeDistributor(id uint) (*domain.Retur, error) {
 
 		qtyKirim := 1
 
+		prodID := retur.Sales.ProductID
+		if prodID == 0 && retur.ProductID != nil {
+			prodID = *retur.ProductID
+		}
+		loc := retur.Sales.Location
+		if loc == "" {
+			loc = "Toko Utama"
+		}
+
 		// Mengurangi stok produk di toko karena barang fisik dikirim ke suplier/distributor
-		if err := tx.Model(&domain.Product{}).Where("id = ?", retur.Sales.ProductID).Update("saldo", gorm.Expr("saldo - ?", qtyKirim)).Error; err != nil {
-			return err
+		if prodID > 0 {
+			if err := tx.Model(&domain.Product{}).Where("id = ?", prodID).Update("saldo", gorm.Expr("saldo - ?", qtyKirim)).Error; err != nil {
+				return err
+			}
+			_ = AdjustProductStock(tx, prodID, loc, -float64(qtyKirim), "RETUR_DISTRIBUTOR", fmt.Sprintf("Kirim Retur ke Distributor (#%d)", retur.ID), retur.Reason, "SYSTEM")
 		}
 
 		retur.Status = "Retur ke Distributor"
@@ -344,9 +370,21 @@ func (s *returService) SelesaikanRetur(id uint) (*domain.Retur, error) {
 
 		qtyKembali := 1
 
+		prodID := retur.Sales.ProductID
+		if prodID == 0 && retur.ProductID != nil {
+			prodID = *retur.ProductID
+		}
+		loc := retur.Sales.Location
+		if loc == "" {
+			loc = "Toko Utama"
+		}
+
 		// Tambahkan kembali stok produk toko karena barang baru pengganti/perbaikan dari distributor sudah datang
-		if err := tx.Model(&domain.Product{}).Where("id = ?", retur.Sales.ProductID).Update("saldo", gorm.Expr("saldo + ?", qtyKembali)).Error; err != nil {
-			return err
+		if prodID > 0 {
+			if err := tx.Model(&domain.Product{}).Where("id = ?", prodID).Update("saldo", gorm.Expr("saldo + ?", qtyKembali)).Error; err != nil {
+				return err
+			}
+			_ = AdjustProductStock(tx, prodID, loc, float64(qtyKembali), "RETUR_DISTRIBUTOR_IN", fmt.Sprintf("Selesai Retur Distributor (#%d)", retur.ID), retur.Reason, "SYSTEM")
 		}
 
 		retur.Status = "Selesai (Distributor)"

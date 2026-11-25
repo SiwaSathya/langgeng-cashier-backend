@@ -50,6 +50,11 @@ type StockOpname struct {
 	TotalDiffValue float64           `json:"total_diff_value"` // Total nominal (Rp) deviasi berdasarkan HBeli
 	CompletedAt    *time.Time        `json:"completed_at,omitempty"`
 	Items          []StockOpnameItem `gorm:"foreignKey:StockOpnameID" json:"items,omitempty"`
+
+	// Metadata ringkasan sinkronisasi stok global saat ApproveSession (non-DB)
+	GlobalStockUpdatedCount  int `gorm:"-" json:"global_stock_updated_count,omitempty"`
+	GlobalStockRaisedCount   int `gorm:"-" json:"global_stock_raised_count,omitempty"`
+	GlobalStockFullSyncCount int `gorm:"-" json:"global_stock_full_sync_count,omitempty"`
 }
 
 // StockOpnameItem mencatat baris rincian hitungan fisik per barang dalam sesi opname
@@ -88,4 +93,23 @@ type SubmitOpnameRequest struct {
 
 type ApproveOpnameRequest struct {
 	Notes string `json:"notes"`
+}
+
+// LocationOpnameStatus merangkum status kelengkapan SO per titik lokasi resmi
+type LocationOpnameStatus struct {
+	Location          string     `json:"location"`
+	HasCompletedSO    bool       `json:"has_completed_so"`
+	CompletedSessions int64      `json:"completed_sessions"`
+	LastCompletedAt   *time.Time `json:"last_completed_at,omitempty"`
+}
+
+// GlobalStockSyncResult merangkum preview maupun hasil eksekusi sinkronisasi stok global dari hasil SO
+type GlobalStockSyncResult struct {
+	TotalProductsWithSO int                    `json:"total_products_with_so"`
+	TotalChanged        int                    `json:"total_changed"`
+	TotalRaised         int                    `json:"total_raised"`
+	TotalLowered        int                    `json:"total_lowered"`
+	TotalUnchanged      int                    `json:"total_unchanged"`
+	LocationStatuses    []LocationOpnameStatus `json:"location_statuses"`
+	All5LocationsDone   bool                   `json:"all_5_locations_done"`
 }

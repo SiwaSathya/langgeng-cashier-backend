@@ -22,6 +22,7 @@ func (h *PurchaseHandler) RegisterRoutes(app *fiber.App) {
 
 	api.Post("/purchases", h.Create)
 	api.Get("/purchases", h.GetAll)
+	api.Put("/purchases/nota/:nota/release", h.ReleaseTransitNota)
 	api.Delete("/purchases/nota/:nota", h.DeleteByNota)
 }
 
@@ -109,5 +110,28 @@ func (h *PurchaseHandler) DeleteByNota(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status":  "success",
 		"message": "Transaksi nota pembelian berhasil dibatalkan dan stok telah dikembalikan",
+	})
+}
+
+// ReleaseTransitNota merilis stok pembelian berstatus Transit ke stok fisik toko/gudang
+func (h *PurchaseHandler) ReleaseTransitNota(c *fiber.Ctx) error {
+	nota := c.Params("nota")
+	if nota == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Nomor nota wajib diisi",
+		})
+	}
+
+	if err := h.Service.ReleaseTransitNota(nota); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "Stok barang berhasil dirilis dan resmi masuk ke persediaan toko/gudang",
 	})
 }

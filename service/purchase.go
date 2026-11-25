@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"backend-cashier/domain"
+
 	"gorm.io/gorm"
 )
 
@@ -39,13 +40,21 @@ func (s *PurchaseService) CreateBatch(req domain.CreatePurchaseBatchRequest) err
 	}
 
 	loc := strings.TrimSpace(req.Location)
-	if loc == "" {
+	locExplicit := loc != ""
+	if !locExplicit {
 		loc = "Toko Utama"
 	}
 
 	docType := strings.TrimSpace(req.DocType)
 	if docType == "" {
 		docType = "Nota Faktur"
+	}
+
+	status := strings.TrimSpace(req.Status)
+	if strings.EqualFold(status, "Transit") {
+		status = "Transit"
+	} else {
+		status = "Received"
 	}
 
 	// 1. Validasi & Sanitasi SupplierID (Nullable FK)
@@ -66,7 +75,7 @@ func (s *PurchaseService) CreateBatch(req domain.CreatePurchaseBatchRequest) err
 		var u domain.User
 		if err := s.DB.Where("id = ?", reqUserID).First(&u).Error; err == nil {
 			userIDPtr = &u.ID
-			if (loc == "" || loc == "Toko Utama") && u.Location != "" {
+			if !locExplicit && u.Location != "" {
 				loc = u.Location
 			}
 		}
@@ -75,7 +84,7 @@ func (s *PurchaseService) CreateBatch(req domain.CreatePurchaseBatchRequest) err
 		var u domain.User
 		if err := s.DB.First(&u).Error; err == nil {
 			userIDPtr = &u.ID
-			if (loc == "" || loc == "Toko Utama") && u.Location != "" {
+			if !locExplicit && u.Location != "" {
 				loc = u.Location
 			}
 		}
@@ -108,21 +117,26 @@ func (s *PurchaseService) CreateBatch(req domain.CreatePurchaseBatchRequest) err
 				Location:   loc,
 				UserID:     userIDPtr,
 				DocType:    docType,
+				Status:     status,
 			}
 
 			if err := tx.Create(&p).Error; err != nil {
 				return err
 			}
 
-			// Tambah saldo stok produk
-			if err := tx.Model(&prod).Update("saldo", prod.Saldo+item.Qty).Error; err != nil {
-				return err
+			// Jika status bukan Transit (misal: Received), langsung tambahkan stok produk & mutasi cabang
+			if status != "Transit" {
+				if err := tx.Model(&domain.Product{}).Where("id = ?", prod.ID).Update("saldo", gorm.Expr("saldo + ?", item.Qty)).Error; err != nil {
+					return err
+				}
+				if err := AdjustProductStock(tx, prod.ID, loc, item.Qty, "PURCHASE", req.Nota, fmt.Sprintf("Pembelian Masuk (#%s)", req.Nota), "SYSTEM"); err != nil {
+					return err
+				}
 			}
-			_ = AdjustProductStock(tx, prod.ID, loc, item.Qty, "PURCHASE", req.Nota, fmt.Sprintf("Pembelian Masuk (#%s)", req.Nota), "SYSTEM")
 
 			// Perbarui harga beli master jika diisi
 			if item.HBeli > 0 {
-				tx.Model(&prod).Update("h_beli", item.HBeli)
+				tx.Model(&domain.Product{}).Where("id = ?", prod.ID).Update("h_beli", item.HBeli)
 			}
 		}
 
@@ -214,6 +228,10 @@ func GroupPurchasesByNota(purchases []domain.Purchase) []domain.PurchaseTransact
 		if docType == "" {
 			docType = "Nota Faktur"
 		}
+		status := p.Status
+		if status == "" {
+			status = "Received"
+		}
 
 		idx, exists := groupMap[nota]
 		if !exists {
@@ -227,6 +245,7 @@ func GroupPurchasesByNota(purchases []domain.Purchase) []domain.PurchaseTransact
 				UserID:      userID,
 				User:        p.User,
 				DocType:     docType,
+				Status:      status,
 				TotalQty:    p.Qty,
 				TotalAmount: p.Total,
 				TotalItems:  1,
@@ -241,6 +260,9 @@ func GroupPurchasesByNota(purchases []domain.Purchase) []domain.PurchaseTransact
 			groups[idx].TotalItems++
 			if groups[idx].DocType == "" {
 				groups[idx].DocType = docType
+			}
+			if strings.EqualFold(status, "Transit") {
+				groups[idx].Status = "Transit"
 			}
 		}
 	}
@@ -277,6 +299,10 @@ func GroupPurchasesBySupplier(purchases []domain.Purchase) []domain.PurchaseTran
 		if docType == "" {
 			docType = "Nota Faktur"
 		}
+		status := p.Status
+		if status == "" {
+			status = "Received"
+		}
 
 		idx, exists := groupMap[suppName]
 		if !exists {
@@ -289,6 +315,7 @@ func GroupPurchasesBySupplier(purchases []domain.Purchase) []domain.PurchaseTran
 				UserID:      userID,
 				User:        p.User,
 				DocType:     docType,
+				Status:      status,
 				TotalQty:    p.Qty,
 				TotalAmount: p.Total,
 				TotalItems:  1,
@@ -301,6 +328,9 @@ func GroupPurchasesBySupplier(purchases []domain.Purchase) []domain.PurchaseTran
 			groups[idx].TotalQty += p.Qty
 			groups[idx].TotalAmount += p.Total
 			groups[idx].TotalItems++
+			if strings.EqualFold(status, "Transit") {
+				groups[idx].Status = "Transit"
+			}
 		}
 	}
 
@@ -313,7 +343,7 @@ func GroupPurchasesBySupplier(purchases []domain.Purchase) []domain.PurchaseTran
 	return groups
 }
 
-// DeleteByNota membatalkan pembelian 1 nota dan mengembalikan stok produk (rollback)
+// DeleteByNota membatalkan pembelian 1 nota dan mengembalikan stok produk (rollback) jika stok sudah masuk
 func (s *PurchaseService) DeleteByNota(nota string) error {
 	var items []domain.Purchase
 	return s.DB.Transaction(func(tx *gorm.DB) error {
@@ -322,13 +352,58 @@ func (s *PurchaseService) DeleteByNota(nota string) error {
 		}
 
 		for _, item := range items {
+			// Nota berstatus Transit belum pernah menambah stok produk atau product_stocks
+			if item.Status == "Transit" {
+				continue
+			}
 			var prod domain.Product
 			if err := tx.First(&prod, item.ProductID).Error; err == nil {
-				tx.Model(&prod).Update("saldo", prod.Saldo-item.Qty)
-				_ = AdjustProductStock(tx, prod.ID, item.Location, -item.Qty, "PURCHASE_CANCEL", item.Nota, fmt.Sprintf("Pembatalan Pembelian (#%s)", item.Nota), "SYSTEM")
+				if err := tx.Model(&domain.Product{}).Where("id = ?", prod.ID).Update("saldo", gorm.Expr("saldo - ?", item.Qty)).Error; err != nil {
+					return err
+				}
+				if err := AdjustProductStock(tx, prod.ID, item.Location, -item.Qty, "PURCHASE_CANCEL", item.Nota, fmt.Sprintf("Pembatalan Pembelian (#%s)", item.Nota), "SYSTEM"); err != nil {
+					return err
+				}
 			}
 		}
 
 		return tx.Where("nota = ?", nota).Delete(&domain.Purchase{}).Error
+	})
+}
+
+// ReleaseTransitNota merilis pembelian yang sebelumnya di-hold / Transit agar resmi menambah saldo stok produk
+func (s *PurchaseService) ReleaseTransitNota(nota string) error {
+	var items []domain.Purchase
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("nota = ?", nota).Find(&items).Error; err != nil || len(items) == 0 {
+			return errors.New("data nota pembelian tidak ditemukan")
+		}
+
+		alreadyReleased := true
+		for _, item := range items {
+			if item.Status == "Transit" {
+				alreadyReleased = false
+				break
+			}
+		}
+		if alreadyReleased {
+			return errors.New("nota pembelian ini sudah berstatus Received (stok sudah masuk sebelumnya)")
+		}
+
+		for _, item := range items {
+			if item.Status == "Transit" {
+				var prod domain.Product
+				if err := tx.First(&prod, item.ProductID).Error; err == nil {
+					if err := tx.Model(&domain.Product{}).Where("id = ?", prod.ID).Update("saldo", gorm.Expr("saldo + ?", item.Qty)).Error; err != nil {
+						return err
+					}
+					if err := AdjustProductStock(tx, prod.ID, item.Location, item.Qty, "PURCHASE_RELEASE", item.Nota, fmt.Sprintf("Penerimaan Barang Pasca SO (#%s)", item.Nota), "SYSTEM"); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		return tx.Model(&domain.Purchase{}).Where("nota = ?", nota).Update("status", "Received").Error
 	})
 }

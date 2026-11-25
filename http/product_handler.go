@@ -14,10 +14,11 @@ import (
 
 type ProductHandler struct {
 	Service *service.ProductService
+	Storage service.StorageService
 }
 
-func NewProductHandler(s *service.ProductService) *ProductHandler {
-	return &ProductHandler{Service: s}
+func NewProductHandler(s *service.ProductService, storage service.StorageService) *ProductHandler {
+	return &ProductHandler{Service: s, Storage: storage}
 }
 
 func (h *ProductHandler) RegisterRoutes(app fiber.Router) {
@@ -30,6 +31,11 @@ func (h *ProductHandler) RegisterRoutes(app fiber.Router) {
 	group.Post("/", h.Create)
 	group.Put("/:id", h.Update)
 	group.Delete("/:id", h.Delete)
+
+	// Manajemen Galeri Foto Produk (Bisa per cabang / toko)
+	group.Get("/:id/images", h.GetProductImages)
+	group.Post("/:id/images", h.UploadProductImage)
+	group.Delete("/images/:imageId", h.DeleteProductImage)
 }
 
 // isRestrictedStockRole memeriksa apakah role pengguna adalah kasir atau super-kasir
@@ -235,4 +241,76 @@ func (h *ProductHandler) Delete(c *fiber.Ctx) error {
 // LiveStock menyiarkan event perubahan stok produk secara real-time via SSE
 func (h *ProductHandler) LiveStock(c *fiber.Ctx) error {
 	return StreamSSE(c, service.GetGlobalSSE(), "products:stock")
+}
+
+// GetProductImages mengambil seluruh foto produk
+func (h *ProductHandler) GetProductImages(c *fiber.Ctx) error {
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil || id <= 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "ID produk tidak valid"})
+	}
+	location := c.Query("location")
+	images, err := h.Service.GetProductImages(uint(id), location)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"data": images})
+}
+
+// UploadProductImage mengunggah foto produk baru ke MinIO / storage
+func (h *ProductHandler) UploadProductImage(c *fiber.Ctx) error {
+	id, err := strconv.Atoi(c.Params("id"))
+	if err != nil || id <= 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "ID produk tidak valid"})
+	}
+
+	file, err := c.FormFile("photo")
+	if err != nil {
+		file, err = c.FormFile("image")
+		if err != nil {
+			file, err = c.FormFile("file")
+		}
+	}
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "File foto wajib diunggah (form field: photo, image, atau file)"})
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal membaca file: " + err.Error()})
+	}
+	defer src.Close()
+
+	contentType := file.Header.Get("Content-Type")
+	location := strings.TrimSpace(c.FormValue("location"))
+	caption := strings.TrimSpace(c.FormValue("caption"))
+
+	imageURL, err := h.Storage.UploadFile(c.Context(), "products", file.Filename, src, file.Size, contentType)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Gagal menyimpan foto produk: " + err.Error()})
+	}
+
+	img, err := h.Service.AddProductImage(uint(id), location, imageURL, caption)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Foto produk berhasil diunggah",
+		"data":    img,
+	})
+}
+
+// DeleteProductImage menghapus foto produk
+func (h *ProductHandler) DeleteProductImage(c *fiber.Ctx) error {
+	imageId, err := strconv.Atoi(c.Params("imageId"))
+	if err != nil || imageId <= 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "ID foto tidak valid"})
+	}
+
+	if err := h.Service.DeleteProductImage(uint(imageId)); err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "Foto berhasil dihapus"})
 }

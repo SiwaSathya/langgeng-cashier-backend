@@ -50,8 +50,9 @@ type Purchase struct {
 	Total      float64   `json:"total"`
 	UserID     *string   `gorm:"size:100;index" json:"user_id"`
 	User       User      `gorm:"foreignKey:UserID" json:"user"`
-	Location   string    `gorm:"size:100;index" json:"location"`                // Toko Utama, Toko Sudirman, Toko Paye
+	Location   string    `gorm:"size:100;index" json:"location"`                // Toko Utama, Toko Sudirman, Toko Paye, Gudang Karangsokong, Gudang BTN
 	DocType    string    `gorm:"size:50;default:'Nota Faktur'" json:"doc_type"` // Nota Faktur, Surat Jalan
+	Status     string    `gorm:"size:50;default:'Received';index" json:"status"` // Received, Transit
 }
 
 type PurchaseRequest struct {
@@ -80,6 +81,7 @@ type CreatePurchaseBatchRequest struct {
 	Location   string                `json:"location"`
 	UserID     FlexibleID            `json:"user_id"`
 	DocType    string                `json:"doc_type"` // "Nota Faktur" (default) atau "Surat Jalan"
+	Status     string                `json:"status"`   // "Received" atau "Transit"
 	Items      []PurchaseItemRequest `json:"items"`
 	ProductID  uint                  `json:"product_id,omitempty"`
 	Qty        float64               `json:"qty,omitempty"`
@@ -96,6 +98,7 @@ type PurchaseTransactionGroup struct {
 	UserID      string     `json:"user_id"`
 	User        User       `json:"user"`
 	DocType     string     `json:"doc_type,omitempty"`
+	Status      string     `json:"status,omitempty"`
 	TotalQty    float64    `json:"total_qty"`
 	TotalAmount float64    `json:"total_amount"`
 	DPP         float64    `json:"dpp"`

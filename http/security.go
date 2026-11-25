@@ -166,9 +166,10 @@ func SQLInjectionFirewallMiddleware() fiber.Handler {
 			}
 		}
 
-		// 2. Periksa Body JSON jika method POST/PUT/PATCH
+		// 2. Periksa Body JSON/Form-UrlEncoded jika method POST/PUT/PATCH (lewati multipart/form-data upload file agar boundary '----' & biner foto tidak memicu false-positive)
 		method := c.Method()
-		if method == fiber.MethodPost || method == fiber.MethodPut || method == fiber.MethodPatch {
+		contentType := strings.ToLower(c.Get("Content-Type"))
+		if (method == fiber.MethodPost || method == fiber.MethodPut || method == fiber.MethodPatch) && !strings.Contains(contentType, "multipart/form-data") {
 			body := c.Body()
 			if len(body) > 0 && len(body) < 1048576 { // Cek hanya jika di bawah 1MB
 				bodyStr := string(body)
@@ -221,9 +222,10 @@ func XSSSanitizerMiddleware() fiber.Handler {
 			}
 		}
 
-		// Periksa Request Body
+		// Periksa Request Body (lewati multipart/form-data upload file agar biner file tidak terdeteksi sebagai XSS false-positive)
 		method := c.Method()
-		if method == fiber.MethodPost || method == fiber.MethodPut || method == fiber.MethodPatch {
+		contentType := strings.ToLower(c.Get("Content-Type"))
+		if (method == fiber.MethodPost || method == fiber.MethodPut || method == fiber.MethodPatch) && !strings.Contains(contentType, "multipart/form-data") {
 			body := c.Body()
 			if len(body) > 0 && len(body) < 1048576 {
 				bodyStr := string(body)

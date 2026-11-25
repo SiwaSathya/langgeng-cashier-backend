@@ -247,7 +247,7 @@ func parsePriceString(val string) float64 {
 	return res
 }
 
-func main() {
+func cmd() {
 	importType := flag.String("type", "", "Tipe command: stock, rekap, pembelian, json, idealife, sync-accounting")
 	flag.Parse()
 

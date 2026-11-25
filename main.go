@@ -46,7 +46,7 @@ func main() {
 
 	trxHandler := http.NewTransactionHandler(trxService, authService)
 	masterHandler := http.NewMasterHandler(masterService)
-	prodHandler := http.NewProductHandler(prodService)
+	prodHandler := http.NewProductHandler(prodService, storageService)
 	purchaseHandler := http.NewPurchaseHandler(purchaseService)
 	authHandler := http.NewAuthHandler(authService, userLogService, presenceService)
 	expenseHandler := http.NewExpenseHandler(expenseService, authService)
